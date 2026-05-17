@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frame Lab — EXIF-Aware Photo Framer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+
+:root{
+  --bg-primary:#ffffff;--bg-secondary:#f5f5f3;--bg-tertiary:#ebebea;
+  --text-primary:#1a1a1a;--text-secondary:#555550;--text-tertiary:#999993;
+  --border-tertiary:rgba(0,0,0,0.1);--border-secondary:rgba(0,0,0,0.2);--border-primary:rgba(0,0,0,0.35);
+  --text-info:#1a6fc4;--text-danger:#c0392b;--radius-md:8px;--radius-lg:12px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg-primary:#1c1c1e;--bg-secondary:#2c2c2e;--bg-tertiary:#3a3a3c;
+    --text-primary:#f2f2f0;--text-secondary:#aeaea8;--text-tertiary:#6e6e68;
+    --border-tertiary:rgba(255,255,255,0.1);--border-secondary:rgba(255,255,255,0.2);--border-primary:rgba(255,255,255,0.35);
+    --text-info:#5aa3f0;--text-danger:#e05c4b;
+  }
+}
+
+html,body{height:100%;}
+body{font-family:'DM Mono',monospace;background:var(--bg-tertiary);color:var(--text-primary);}
+.app{display:flex;flex-direction:column;height:100vh;min-height:600px;}
+
+.app-header{display:flex;align-items:baseline;gap:12px;padding:.85rem 1.5rem;border-bottom:.5px solid var(--border-tertiary);background:var(--bg-primary);flex-shrink:0;}
+.app-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:500;}
+.app-sub{font-size:11px;color:var(--text-tertiary);letter-spacing:.08em;}
+
+.workspace{display:grid;grid-template-columns:1fr 280px;flex:1;min-height:0;overflow:hidden;}
+
+.left-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-secondary);border-right:.5px solid var(--border-tertiary);padding:1.5rem 1.5rem 1rem;gap:12px;overflow:hidden;}
+.drop-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;width:100%;flex:1;min-height:300px;cursor:pointer;border:.5px dashed var(--border-secondary);border-radius:var(--radius-lg);transition:background .15s;padding:2rem;text-align:center;}
+.drop-zone:hover,.drop-zone.dragover{background:var(--bg-tertiary);}
+.drop-icon{font-size:36px;color:var(--text-tertiary);}
+.drop-label{font-size:12px;color:var(--text-secondary);line-height:1.7;}
+.drop-label span{color:var(--text-info);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
+.preview-wrap{flex:1;display:none;align-items:center;justify-content:center;overflow:hidden;width:100%;min-height:0;}
+canvas#preview{max-width:100%;max-height:100%;display:block;border-radius:2px;}
+.left-bottom{display:none;justify-content:center;gap:8px;flex-shrink:0;width:100%;}
+#fileInput{display:none;}
+
+.right-panel{overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:1rem;background:var(--bg-primary);}
+.right-panel::-webkit-scrollbar{width:3px;}
+.right-panel::-webkit-scrollbar-thumb{background:var(--border-secondary);border-radius:2px;}
+
+.section-block{display:flex;flex-direction:column;gap:8px;padding-bottom:1rem;border-bottom:.5px solid var(--border-tertiary);}
+.section-block:last-child{border-bottom:none;padding-bottom:0;}
+.section-label{font-size:11px;letter-spacing:.08em;color:var(--text-tertiary);text-transform:uppercase;margin-bottom:2px;}
+.ctrl-row{display:flex;flex-direction:column;gap:4px;}
+.ctrl-header{display:flex;justify-content:space-between;align-items:center;}
+.ctrl-label{font-size:11px;color:var(--text-secondary);}
+.ctrl-val{font-size:11px;color:var(--text-primary);font-weight:500;}
+input[type=range]{width:100%;height:4px;accent-color:var(--text-primary);cursor:pointer;}
+
+.style-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.style-card{border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:var(--bg-primary);cursor:pointer;overflow:hidden;transition:border-color .12s;}
+.style-card:hover{border-color:var(--border-secondary);}
+.style-card.active{border:1.5px solid var(--text-primary);}
+.style-card svg{display:block;width:100%;height:48px;}
+.style-card-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--text-secondary);text-align:center;padding:4px 0 5px;}
+.style-card.active .style-card-label{color:var(--text-primary);font-weight:500;}
+
+.toggle-row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;}
+.toggle{position:relative;width:30px;height:17px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.slider-toggle{position:absolute;inset:0;background:var(--bg-tertiary);border:.5px solid var(--border-secondary);border-radius:9px;cursor:pointer;transition:.2s;}
+.slider-toggle:before{content:'';position:absolute;width:11px;height:11px;left:2px;top:2px;background:var(--text-tertiary);border-radius:50%;transition:.2s;}
+.toggle input:checked+.slider-toggle{background:var(--text-primary);border-color:var(--text-primary);}
+.toggle input:checked+.slider-toggle:before{transform:translateX(13px);background:var(--bg-primary);}
+
+.color-chip{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .1s;flex-shrink:0;}
+.color-chip:hover{transform:scale(1.15);}
+.color-chip.selected{border-color:var(--text-primary);}
+
+.ei{font-family:'DM Mono',monospace;font-size:11px;padding:4px 6px;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);width:100%;}
+.ei:focus{outline:none;border-color:var(--border-primary);}
+
+.num-field{display:flex;flex-direction:column;gap:3px;}
+.num-field-label{font-size:10px;color:var(--text-tertiary);letter-spacing:.04em;}
+.num-field-wrap{display:flex;align-items:center;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);overflow:hidden;background:var(--bg-secondary);}
+.num-field-wrap:focus-within{border-color:var(--border-primary);}
+.nf-pfx{font-size:11px;color:var(--text-tertiary);padding:4px 3px 4px 7px;white-space:nowrap;flex-shrink:0;user-select:none;}
+.nf-sfx{font-size:11px;color:var(--text-tertiary);padding:4px 7px 4px 2px;white-space:nowrap;flex-shrink:0;user-select:none;}
+.nf-slash{font-size:11px;color:var(--text-tertiary);padding:4px 2px;flex-shrink:0;user-select:none;}
+.nf-input{font-family:'DM Mono',monospace;font-size:11px;padding:4px 4px 4px 2px;border:none;background:transparent;color:var(--text-primary);width:100%;min-width:0;}
+.nf-input:focus{outline:none;}
+.nf-input::-webkit-inner-spin-button,.nf-input::-webkit-outer-spin-button{-webkit-appearance:none;appearance:none;margin:0;}
+.nf-input[type=number]{-moz-appearance:textfield;}
+
+input[type=datetime-local]{font-family:'DM Mono',monospace;font-size:11px;padding:4px 6px;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);width:100%;cursor:pointer;}
+input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary);}
+
+.font-select{width:100%;font-family:'DM Mono',monospace;font-size:11px;padding:5px 8px;border:.5px solid var(--border-secondary);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;}
+.font-preview{font-size:13px;color:var(--text-secondary);padding:6px 8px;background:var(--bg-secondary);border-radius:var(--radius-md);margin-top:4px;min-height:28px;border:.5px solid var(--border-tertiary);}
+.font-source-tabs{display:flex;gap:4px;margin-bottom:6px;}
+.font-tab{flex:1;padding:5px;font-family:'DM Mono',monospace;font-size:10px;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:transparent;color:var(--text-secondary);cursor:pointer;text-align:center;}
+.font-tab.active{background:var(--text-primary);color:var(--bg-primary);border-color:var(--text-primary);}
+
+.action-btn{padding:8px 14px;font-family:'DM Mono',monospace;font-size:11px;border:.5px solid var(--border-secondary);border-radius:var(--radius-md);background:var(--text-primary);color:var(--bg-primary);cursor:pointer;transition:opacity .12s;}
+.action-btn:hover{opacity:.78;}
+.reset-btn{padding:7px 14px;font-family:'DM Mono',monospace;font-size:11px;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:transparent;color:var(--text-secondary);cursor:pointer;transition:color .12s,border-color .12s;}
+.reset-btn:hover{color:var(--text-danger);border-color:var(--text-danger);}
+.apply-btn{padding:4px 8px;font-size:10px;font-family:'DM Mono',monospace;border:.5px solid var(--border-secondary);border-radius:var(--radius-md);background:transparent;cursor:pointer;color:var(--text-primary);flex-shrink:0;white-space:nowrap;}
+.apply-btn:hover{background:var(--bg-secondary);}
+.step-btn{width:22px;height:22px;font-size:15px;border:.5px solid var(--border-secondary);border-radius:var(--radius-md);background:transparent;cursor:pointer;color:var(--text-primary);display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;}
+.step-btn:hover{background:var(--bg-secondary);}
+.fsn{width:44px;text-align:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:500;padding:2px 4px;border:.5px solid var(--border-secondary);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);}
+.fsn::-webkit-inner-spin-button,.fsn::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+.fsn[type=number]{-moz-appearance:textfield;}
+.fsn:focus{outline:none;border-color:var(--border-primary);}
+
+.opts{display:none;flex-direction:column;gap:8px;}
+.opts.visible{display:flex;}
+.seg{display:flex;gap:4px;}
+.seg-btn{flex:1;padding:5px 4px;font-family:'DM Mono',monospace;font-size:10px;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:transparent;color:var(--text-secondary);cursor:pointer;text-align:center;}
+.seg-btn:hover{border-color:var(--border-secondary);}
+.seg-btn.active{background:var(--text-primary);color:var(--bg-primary);border-color:var(--text-primary);}
+.preset-item{display:flex;align-items:center;gap:6px;padding:6px 8px;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:var(--bg-secondary);cursor:pointer;transition:border-color .12s;}
+.preset-item:hover{border-color:var(--border-secondary);}
+.preset-name{font-size:11px;color:var(--text-primary);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.preset-del{font-size:16px;line-height:1;color:var(--text-tertiary);cursor:pointer;padding:0 2px;flex-shrink:0;}
+.preset-del:hover{color:var(--text-danger);}
+.preset-empty{font-size:11px;color:var(--text-tertiary);text-align:center;padding:8px 0;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="app-header">
+    <div class="app-title">Frame Lab</div>
+    <div class="app-sub">v13 · EXIF-AWARE PHOTO FRAMER</div>
+  </div>
+
+  <div class="workspace">
+    <div class="left-panel" id="leftPanel">
+      <div class="drop-zone" id="dropZone">
+        <i class="ti ti-camera drop-icon" aria-hidden="true"></i>
+        <div class="drop-label">
+          写真をドロップ、または<span onclick="document.getElementById('fileInput').click()">クリックして選択</span><br>
+          JPEG / PNG 対応
+        </div>
+      </div>
+      <div class="preview-wrap" id="previewWrap">
+        <canvas id="preview"></canvas>
+      </div>
+      <div class="left-bottom" id="leftBottom">
+        <button class="reset-btn" id="resetBtn"><i class="ti ti-refresh" style="font-size:13px;"></i> 別の写真</button>
+        <button class="action-btn" id="downloadBtn"><i class="ti ti-download" style="font-size:13px;"></i> 保存</button>
+      </div>
+    </div>
+
+    <div class="right-panel">
+
+      <!-- フレームスタイル -->
+      <div class="section-block">
+        <div class="section-label">フレームスタイル</div>
+        <div class="style-grid">
+
+          <button class="style-card" data-style="overlay" onclick="setStyle('overlay',this)">
+            <svg viewBox="0 0 120 48" xmlns="http://www.w3.org/2000/svg">
+              <rect width="120" height="48" fill="#6b7a8d"/>
+              <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".75"/></linearGradient></defs>
+              <rect y="24" width="120" height="24" fill="url(#g1)"/>
+              <text x="7" y="37" font-size="5.5" fill="white" font-family="monospace" opacity=".9">SONY α7IV</text>
+              <text x="7" y="44" font-size="4.5" fill="white" font-family="monospace" opacity=".65">f/1.8  1/250s  ISO 400</text>
+            </svg>
+            <div class="style-card-label">Overlay</div>
+          </button>
+
+          <!-- Polaroid: デフォルト active -->
+          <button class="style-card active" data-style="polaroid" onclick="setStyle('polaroid',this)">
+            <svg viewBox="0 0 120 48" xmlns="http://www.w3.org/2000/svg">
+              <rect width="120" height="48" fill="#fff" rx="2"/>
+              <rect x="5" y="4" width="110" height="28" fill="#8a929e" rx="1"/>
+              <text x="60" y="38" font-size="4.8" fill="#222" font-family="sans-serif" font-weight="bold" text-anchor="middle">Canon EOS 40D / EF 50mm</text>
+              <text x="60" y="45" font-size="3.8" fill="#888" font-family="monospace" text-anchor="middle">50mm  f/1.8  1/320s  ISO400</text>
+            </svg>
+            <div class="style-card-label">Polaroid</div>
+          </button>
+
+          <button class="style-card" data-style="banner" onclick="setStyle('banner',this)">
+            <svg viewBox="0 0 120 48" xmlns="http://www.w3.org/2000/svg">
+              <rect width="120" height="36" fill="#7a8494"/>
+              <rect y="36" width="120" height="12" fill="#f8f8f8"/>
+              <line x1="0" y1="36" x2="120" y2="36" stroke="#ddd" stroke-width="0.5"/>
+              <text x="4" y="43.5" font-size="5" fill="#222" font-family="sans-serif" font-weight="bold">Canon EOS R6</text>
+              <text x="4" y="47.5" font-size="3.2" fill="#888" font-family="monospace">EF 50mm f/1.4</text>
+              <text x="116" y="42" font-size="4.5" fill="#222" font-family="monospace" font-weight="bold" text-anchor="end">f/1.8  1/250s</text>
+              <text x="116" y="47" font-size="3.2" fill="#888" font-family="monospace" text-anchor="end">2023.06.14</text>
+            </svg>
+            <div class="style-card-label">Banner</div>
+          </button>
+
+        </div>
+
+        <!-- Overlay -->
+        <div id="overlayOpts" class="opts">
+          <div class="ctrl-label">オーバーレイ背景</div>
+          <div class="seg" id="overlayBgSeg">
+            <button class="seg-btn active" data-bg="gradient" onclick="setSegBtn(this,'overlayBgSeg');scheduleRender()">グラデーション</button>
+            <button class="seg-btn" data-bg="band" onclick="setSegBtn(this,'overlayBgSeg');onBgChange()">帯</button>
+            <button class="seg-btn" data-bg="none" onclick="setSegBtn(this,'overlayBgSeg');scheduleRender()">なし</button>
+          </div>
+          <div id="overlayBandOpts" style="display:none;flex-direction:column;gap:8px;">
+            <div class="ctrl-row">
+              <div class="ctrl-header"><span class="ctrl-label">帯の不透明度</span><span class="ctrl-val" id="bandOpacityVal">60%</span></div>
+              <input type="range" min="10" max="95" value="60" id="bandOpacity" step="1">
+            </div>
+            <div class="ctrl-label">帯カラー</div>
+            <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
+              <div class="color-chip band-c selected" data-color="#000000" style="background:#000;" onclick="selectChip(this,'band-c');scheduleRender()"></div>
+              <div class="color-chip band-c" data-color="#1a1a2e" style="background:#1a1a2e;" onclick="selectChip(this,'band-c');scheduleRender()"></div>
+              <div class="color-chip band-c" data-color="#2c1810" style="background:#2c1810;" onclick="selectChip(this,'band-c');scheduleRender()"></div>
+              <div class="color-chip band-c" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="selectChip(this,'band-c');scheduleRender()"></div>
+            </div>
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-header"><span class="ctrl-label">オーバーレイ領域の高さ</span><span class="ctrl-val" id="overlayHeightVal">32%</span></div>
+            <input type="range" min="10" max="70" value="32" id="overlayHeight" step="1">
+          </div>
+          <div class="ctrl-label">テキスト位置</div>
+          <div class="seg" id="overlayPosSeg">
+            <button class="seg-btn" data-pos="top" onclick="setSegBtn(this,'overlayPosSeg');scheduleRender()">上</button>
+            <button class="seg-btn active" data-pos="bottom" onclick="setSegBtn(this,'overlayPosSeg');scheduleRender()">下</button>
+          </div>
+        </div>
+
+        <!-- Polaroid: デフォルト visible -->
+        <div id="polaroidOpts" class="opts visible">
+          <div class="ctrl-label">フレームカラー</div>
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
+            <div class="color-chip pl-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
+            <div class="color-chip pl-c" data-color="#f5f0e8" style="background:#f5f0e8;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
+            <div class="color-chip pl-c" data-color="#1a1a1a" style="background:#1a1a1a;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
+            <div class="color-chip pl-c" data-color="#f0e6d3" style="background:#f0e6d3;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+            <span style="font-size:11px;color:var(--text-tertiary);">#</span>
+            <input type="text" id="polColorInput" class="ei" placeholder="ffffff" value="ffffff" maxlength="7" style="max-width:100px;">
+            <button class="apply-btn" onclick="applyPolColor()">適用</button>
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-header"><span class="ctrl-label">下余白</span><span class="ctrl-val" id="polBottomVal">120px</span></div>
+            <input type="range" min="60" max="260" value="120" id="polBottom" step="5">
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-header"><span class="ctrl-label">側面 / 上余白</span><span class="ctrl-val" id="polSideVal">30px</span></div>
+            <input type="range" min="10" max="80" value="30" id="polSide" step="1">
+          </div>
+        </div>
+
+        <!-- Banner -->
+        <div id="bannerOpts" class="opts">
+          <div class="ctrl-label">バナーカラー</div>
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
+            <div class="color-chip bn-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
+            <div class="color-chip bn-c" data-color="#f5f0e8" style="background:#f5f0e8;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
+            <div class="color-chip bn-c" data-color="#1a1a1a" style="background:#1a1a1a;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
+            <div class="color-chip bn-c" data-color="#1b3a5c" style="background:#1b3a5c;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
+            <div class="color-chip bn-c" data-color="#2c2420" style="background:#2c2420;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+            <span style="font-size:11px;color:var(--text-tertiary);">#</span>
+            <input type="text" id="bannerColorInput" class="ei" placeholder="ffffff" value="ffffff" maxlength="7" style="max-width:100px;">
+            <button class="apply-btn" onclick="applyBannerColor()">適用</button>
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-header"><span class="ctrl-label">バナーの高さ</span><span class="ctrl-val" id="bannerHeightVal">120px</span></div>
+            <input type="range" min="60" max="240" value="120" id="bannerHeight" step="4">
+          </div>
+        </div>
+      </div>
+
+      <!-- Exif情報 -->
+      <div class="section-block">
+        <div class="section-label">Exif情報</div>
+
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div class="toggle-row"><span class="ctrl-label">カメラモデル</span><label class="toggle"><input type="checkbox" id="showCamera" checked onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
+          <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:6px;">
+            <div class="num-field">
+              <span class="num-field-label">メーカー</span>
+              <input class="ei" id="eMake" placeholder="Canon" oninput="scheduleRender()">
+            </div>
+            <div class="num-field">
+              <span class="num-field-label">機種名</span>
+              <input class="ei" id="eModel" placeholder="EOS 40D" oninput="scheduleRender()">
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div class="toggle-row"><span class="ctrl-label">レンズ情報</span><label class="toggle"><input type="checkbox" id="showLens" checked onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
+          <input class="ei" id="eLens" placeholder="EF 50mm F1.8" oninput="scheduleRender()">
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="toggle-row">
+            <span class="ctrl-label">撮影設定 (F値 / SS / ISO)</span>
+            <label class="toggle"><input type="checkbox" id="showSettings" checked onchange="scheduleRender()"><span class="slider-toggle"></span></label>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:5px;">
+              <div class="num-field">
+                <span class="num-field-label">F値</span>
+                <div class="num-field-wrap">
+                  <span class="nf-pfx">f/</span>
+                  <input class="nf-input" id="eAperture" type="number" min="0.7" max="64" step="0.1" placeholder="1.8" oninput="scheduleRender()">
+                </div>
+              </div>
+              <div class="num-field">
+                <span class="num-field-label">SS（分子 / 分母）</span>
+                <div class="num-field-wrap">
+                  <input class="nf-input" id="eSSNum" type="number" min="1" max="3600" step="1" placeholder="1" oninput="scheduleRender()" style="max-width:36px;padding-left:6px;">
+                  <span class="nf-slash">/</span>
+                  <input class="nf-input" id="eShutterDenom" type="number" min="1" max="64000" step="1" placeholder="320" oninput="scheduleRender()">
+                  <span class="nf-sfx">s</span>
+                </div>
+              </div>
+              <div class="num-field">
+                <span class="num-field-label">ISO</span>
+                <div class="num-field-wrap">
+                  <input class="nf-input" id="eIso" type="number" min="50" max="819200" step="100" placeholder="400" oninput="scheduleRender()" style="padding-left:5px;">
+                </div>
+              </div>
+            </div>
+            <div class="num-field">
+              <span class="num-field-label">焦点距離</span>
+              <div class="num-field-wrap">
+                <input class="nf-input" id="eFocal" type="number" min="1" max="2000" step="1" placeholder="50" oninput="scheduleRender()" style="padding-left:6px;">
+                <span class="nf-sfx">mm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div class="toggle-row"><span class="ctrl-label">場所</span><label class="toggle"><input type="checkbox" id="showLocation" onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
+          <input class="ei" id="eLocation" placeholder="Tokyo, Japan" oninput="scheduleRender()">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div class="toggle-row"><span class="ctrl-label">撮影日時</span><label class="toggle"><input type="checkbox" id="showDate" onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
+          <input type="datetime-local" id="eDate" oninput="scheduleRender()">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div class="toggle-row"><span class="ctrl-label">カスタムテキスト</span><label class="toggle"><input type="checkbox" id="showCustom" onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
+          <input class="ei" id="eCustom" placeholder="任意のテキスト" oninput="scheduleRender()">
+        </div>
+      </div>
+
+      <!-- 文字スタイル -->
+      <div class="section-block">
+        <div class="section-label">文字スタイル</div>
+        <div class="font-source-tabs">
+          <button class="font-tab active" onclick="switchFontSource('google',this)">Google Fonts</button>
+          <button class="font-tab" onclick="switchFontSource('system',this)">システム</button>
+          <button class="font-tab" onclick="switchFontSource('custom',this)">カスタム</button>
+        </div>
+        <div id="googleFontPanel">
+          <select class="font-select" id="googleFontSelect" onchange="applyGoogleFont()">
+            <option value="DM Mono">DM Mono</option>
+            <option value="Roboto Mono">Roboto Mono</option>
+            <option value="Space Mono">Space Mono</option>
+            <option value="IBM Plex Mono">IBM Plex Mono</option>
+            <option value="Courier Prime">Courier Prime</option>
+            <option value="Playfair Display">Playfair Display</option>
+            <option value="Lora">Lora</option>
+            <option value="Noto Serif JP">Noto Serif JP</option>
+            <option value="Noto Sans JP">Noto Sans JP</option>
+            <option value="Zen Kaku Gothic New">Zen Kaku Gothic New</option>
+            <option value="Shippori Mincho">Shippori Mincho</option>
+            <option value="Josefin Sans">Josefin Sans</option>
+            <option value="Raleway">Raleway</option>
+            <option value="Oswald">Oswald</option>
+            <option value="Bebas Neue">Bebas Neue</option>
+          </select>
+          <div class="font-preview" id="fontPreview">The quick brown fox — 素早い茶色の狐</div>
+        </div>
+        <div id="systemFontPanel" style="display:none;">
+          <select class="font-select" id="systemFontSelect" onchange="applySystemFont()">
+            <option value="Georgia">Georgia</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Arial">Arial</option>
+            <option value="Courier New">Courier New</option>
+            <option value="monospace">monospace</option>
+            <option value="Hiragino Kaku Gothic ProN">Hiragino Kaku Gothic</option>
+            <option value="Yu Gothic">Yu Gothic</option>
+            <option value="Meiryo">Meiryo</option>
+          </select>
+          <div class="font-preview" id="sysFontPreview" style="font-family:Georgia;">The quick brown fox — 素早い茶色の狐</div>
+        </div>
+        <div id="customFontPanel" style="display:none;">
+          <input type="text" class="font-select" id="customFontInput" placeholder="フォント名を入力" oninput="applyCustomFont()" style="margin-bottom:4px;">
+          <div class="font-preview" id="customFontPreview">The quick brown fox — 素早い茶色の狐</div>
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-header">
+            <span class="ctrl-label">フォントサイズ</span>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button class="step-btn" onclick="stepFontSize(-1)">−</button>
+              <input type="number" id="fontSizePx" class="fsn" min="8" max="120" value="14" step="1" oninput="clampFontSize();scheduleRender()">
+              <button class="step-btn" onclick="stepFontSize(1)">＋</button>
+              <span style="font-size:11px;color:var(--text-tertiary);">px</span>
+            </div>
+          </div>
+          <input type="range" min="8" max="120" value="14" id="fontSizeSlider" step="1" oninput="syncFontSizeFromSlider()">
+        </div>
+        <div class="ctrl-label">文字カラー</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
+          <div class="color-chip tc selected" data-color="#1a1a1a" style="background:#1a1a1a;" onclick="selectChip(this,'tc');textColor='#1a1a1a';g('txtColorInput').value='1a1a1a';scheduleRender()"></div>
+          <div class="color-chip tc" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="selectChip(this,'tc');textColor='#ffffff';g('txtColorInput').value='ffffff';scheduleRender()"></div>
+          <div class="color-chip tc" data-color="#888888" style="background:#888;" onclick="selectChip(this,'tc');textColor='#888888';g('txtColorInput').value='888888';scheduleRender()"></div>
+          <div class="color-chip tc" data-color="#f5d08a" style="background:#f5d08a;" onclick="selectChip(this,'tc');textColor='#f5d08a';g('txtColorInput').value='f5d08a';scheduleRender()"></div>
+          <span style="font-size:11px;color:var(--text-tertiary);">#</span>
+          <input type="text" id="txtColorInput" class="ei" placeholder="1a1a1a" value="1a1a1a" maxlength="7" style="max-width:90px;">
+          <button class="apply-btn" onclick="applyTxtColorCode()">適用</button>
+        </div>
+        <div class="ctrl-row" style="margin-top:4px;">
+          <div class="ctrl-header"><span class="ctrl-label">文字の太さ</span></div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px;">
+            <button class="seg-btn" data-weight="300" style="flex:1;" onclick="setFontWeight('300',this)">Light</button>
+            <button class="seg-btn active" data-weight="400" style="flex:1;" onclick="setFontWeight('400',this)">Regular</button>
+            <button class="seg-btn" data-weight="500" style="flex:1;" onclick="setFontWeight('500',this)">Medium</button>
+            <button class="seg-btn" data-weight="700" style="flex:1;" onclick="setFontWeight('700',this)">Bold</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- プリセット -->
+      <div class="section-block">
+        <div class="section-label">プリセット</div>
+        <div style="display:flex;gap:6px;">
+          <input class="ei" id="presetName" placeholder="名前を入力して保存" style="flex:1;">
+          <button class="apply-btn" onclick="savePreset()">保存</button>
+        </div>
+        <div id="presetList" style="display:flex;flex-direction:column;gap:5px;margin-top:2px;"></div>
+      </div>
+
+      <div style="height:4px;flex-shrink:0;"></div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+<script>
+const g = id => document.getElementById(id);
+let currentImage=null, currentStyle='polaroid', currentFont='DM Mono', fontWeight='400', textColor='#1a1a1a';
+let renderTimer=null, loadedFonts=new Set(['DM Mono','Playfair Display']);
+let bannerCustomColor=null, polCustomColor=null;
+
+// ---- フォーマット ----
+function fmtCamera(){ return [g('eMake').value.trim(), g('eModel').value.trim()].filter(Boolean).join('  '); }
+function fmtAperture(){ const v=parseFloat(g('eAperture').value); if(!v||isNaN(v))return''; return`f/${v%1===0?v.toFixed(0):v}`; }
+function fmtShutter(){
+  const num=parseInt(g('eSSNum').value)||1, den=parseInt(g('eShutterDenom').value);
+  if(!den||isNaN(den))return'';
+  if(num===1&&den===1)return'1s'; if(den===1)return`${num}s`; if(num===1)return`1/${den}s`;
+  return`${num}/${den}s`;
+}
+function fmtIso(){ const v=parseInt(g('eIso').value); if(!v||isNaN(v))return''; return`ISO${v}`; }
+function fmtFocal(){ const v=parseInt(g('eFocal').value); if(!v||isNaN(v))return''; return`${v}mm`; }
+// Polaroid用: 上行「メーカー 機種 / レンズ」、下行「焦点距離 F値 SS ISO」
+function getPolaroidLines(){
+  const cam=fmtCamera(), lens=g('showLens').checked?g('eLens').value.trim():'';
+  const focal=fmtFocal(), ap=fmtAperture(), ss=fmtShutter(), iso=fmtIso();
+
+  const topParts=[];
+  if(g('showCamera').checked&&cam) topParts.push(cam);
+  if(lens) topParts.push(lens);
+  const topLine=topParts.join('  /  ');
+
+  const bottomParts=[focal,ap,ss,iso].filter(Boolean);
+  if(g('showSettings').checked===false) bottomParts.splice(0);
+  const settingsParts=[];
+  if(g('showSettings').checked) settingsParts.push(...[focal,ap,ss,iso].filter(Boolean));
+  else if(focal) settingsParts.push(focal);
+  const bottomLine=settingsParts.join('  ');
+
+  const extra=[];
+  if(g('showLocation').checked&&g('eLocation').value) extra.push(g('eLocation').value);
+  if(g('showDate').checked&&fmtDateTime()) extra.push(fmtDateTime());
+  if(g('showCustom').checked&&g('eCustom').value) extra.push(g('eCustom').value);
+
+  return {topLine, bottomLine, extra};
+}
+function fmtDateTime(){ const v=g('eDate').value; if(!v)return''; return v.replace('T',' ').replace(/-/g,'/'); }
+function getSettingsText(){ return[fmtFocal(),fmtAperture(),fmtShutter(),fmtIso()].filter(Boolean).join('   '); }
+function getOverlayLines(){
+  const lines=[];
+  if(g('showCamera').checked){const t=fmtCamera();if(t)lines.push({text:t,primary:true});}
+  if(g('showSettings').checked){const t=getSettingsText();if(t)lines.push({text:t,primary:false});}
+  if(g('showLens').checked&&g('eLens').value) lines.push({text:g('eLens').value,primary:false});
+  if(g('showLocation').checked&&g('eLocation').value) lines.push({text:g('eLocation').value,primary:false});
+  if(g('showDate').checked&&fmtDateTime()) lines.push({text:fmtDateTime(),primary:false});
+  if(g('showCustom').checked&&g('eCustom').value) lines.push({text:g('eCustom').value,primary:false});
+  return lines;
+}
+
+function getChip(cls){ return document.querySelector(`.color-chip.${cls}.selected`)?.dataset.color||'#000000'; }
+function selectChip(el,cls){ document.querySelectorAll(`.color-chip.${cls}`).forEach(c=>c.classList.remove('selected')); el.classList.add('selected'); }
+function getSegVal(segId){ return document.querySelector(`#${segId} .seg-btn.active`)?.dataset||{}; }
+function setSegBtn(btn,segId){ document.querySelectorAll(`#${segId} .seg-btn`).forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
+
+function setStyle(s,btn){
+  currentStyle=s;
+  document.querySelectorAll('.style-card').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  ['overlayOpts','polaroidOpts','bannerOpts'].forEach(id=>g(id).classList.remove('visible'));
+  g(s+'Opts').classList.add('visible');
+  scheduleRender();
+}
+function onBgChange(){ g('overlayBandOpts').style.display=getSegVal('overlayBgSeg').bg==='band'?'flex':'none'; scheduleRender(); }
+
+g('bandOpacity').addEventListener('input',e=>{g('bandOpacityVal').textContent=e.target.value+'%';scheduleRender();});
+g('overlayHeight').addEventListener('input',e=>{g('overlayHeightVal').textContent=e.target.value+'%';scheduleRender();});
+g('polBottom').addEventListener('input',e=>{g('polBottomVal').textContent=e.target.value+'px';scheduleRender();});
+g('polSide').addEventListener('input',e=>{g('polSideVal').textContent=e.target.value+'px';scheduleRender();});
+g('bannerHeight').addEventListener('input',e=>{g('bannerHeightVal').textContent=e.target.value+'px';scheduleRender();});
+
+function applyPolColor(){
+  let v=g('polColorInput').value.replace('#','').trim();
+  if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split('').map(c=>c+c).join('');
+  if(/^[0-9a-fA-F]{6}$/.test(v)){polCustomColor='#'+v;document.querySelectorAll('.color-chip.pl-c').forEach(c=>c.classList.remove('selected'));scheduleRender();}
+}
+function applyBannerColor(){
+  let v=g('bannerColorInput').value.replace('#','').trim();
+  if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split('').map(c=>c+c).join('');
+  if(/^[0-9a-fA-F]{6}$/.test(v)){bannerCustomColor='#'+v;document.querySelectorAll('.color-chip.bn-c').forEach(c=>c.classList.remove('selected'));scheduleRender();}
+}
+function applyTxtColorCode(){
+  let v=g('txtColorInput').value.replace('#','').trim();
+  if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split('').map(c=>c+c).join('');
+  if(/^[0-9a-fA-F]{6}$/.test(v)){textColor='#'+v;scheduleRender();}
+}
+function setFontWeight(w,btn){ document.querySelectorAll('[data-weight]').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); fontWeight=w; scheduleRender(); }
+function switchFontSource(src,btn){
+  document.querySelectorAll('.font-tab').forEach(t=>t.classList.remove('active')); btn.classList.add('active');
+  g('googleFontPanel').style.display=src==='google'?'':'none';
+  g('systemFontPanel').style.display=src==='system'?'':'none';
+  g('customFontPanel').style.display=src==='custom'?'':'none';
+}
+function applyGoogleFont(){
+  const n=g('googleFontSelect').value; currentFont=n;
+  g('fontPreview').style.fontFamily=n; scheduleRender();
+  if(!loadedFonts.has(n)){
+    const l=document.createElement('link');l.rel='stylesheet';
+    l.href=`https://fonts.googleapis.com/css2?family=${n.replace(/ /g,'+')}:wght@300;400;500;700&display=swap`;
+    l.onload=()=>{loadedFonts.add(n);scheduleRender();};
+    document.head.appendChild(l);
+  }
+  setTimeout(()=>scheduleRender(),500);
+}
+function applySystemFont(){ const n=g('systemFontSelect').value; currentFont=n; g('sysFontPreview').style.fontFamily=n; scheduleRender(); }
+function applyCustomFont(){ const n=g('customFontInput').value.trim(); if(n){currentFont=n;g('customFontPreview').style.fontFamily=n;scheduleRender();} }
+function stepFontSize(d){ const i=g('fontSizePx'),s=g('fontSizeSlider'); let v=Math.min(120,Math.max(8,(parseInt(i.value)||14)+d)); i.value=v;s.value=v;scheduleRender(); }
+function clampFontSize(){ const i=g('fontSizePx'),s=g('fontSizeSlider'); let v=parseInt(i.value); if(isNaN(v))return; v=Math.min(120,Math.max(8,v)); s.value=v; }
+function syncFontSizeFromSlider(){ g('fontSizePx').value=g('fontSizeSlider').value; scheduleRender(); }
+
+const dropZone=g('dropZone'),fileInput=g('fileInput'),previewCanvas=g('preview'),ctx=previewCanvas.getContext('2d');
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f&&f.type.startsWith('image/'))loadFile(f);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+function loadFile(file){
+  const r=new FileReader();
+  r.onload=ev=>{const img=new Image();img.onload=()=>{currentImage=img;extractExif(file,img);};img.src=ev.target.result;};
+  r.readAsDataURL(file);
+}
+
+function extractExif(file,img){
+  if(typeof EXIF!=='undefined'){
+    EXIF.getData(img,function(){
+      const a=EXIF.getAllTags(this)||{};
+      if(a.Make) g('eMake').value=a.Make.trim();
+      if(a.Model) g('eModel').value=a.Model.trim();
+      if(a.FNumber){ const fn=typeof a.FNumber==='object'?a.FNumber.numerator/a.FNumber.denominator:a.FNumber; g('eAperture').value=parseFloat(fn.toFixed(1)); }
+      if(a.ExposureTime){
+        const et=typeof a.ExposureTime==='object'?a.ExposureTime.numerator/a.ExposureTime.denominator:a.ExposureTime;
+        if(et>=1){g('eSSNum').value=Math.round(et);g('eShutterDenom').value=1;}
+        else{g('eSSNum').value=1;g('eShutterDenom').value=Math.round(1/et);}
+      }
+      if(a.ISOSpeedRatings) g('eIso').value=a.ISOSpeedRatings;
+      if(a.LensModel) g('eLens').value=a.LensModel;
+      if(a.FocalLength){
+        const fl=typeof a.FocalLength==='object'?a.FocalLength.numerator/a.FocalLength.denominator:a.FocalLength;
+        g('eFocal').value=Math.round(fl);
+      }
+      if(a.DateTimeOriginal||a.DateTime){
+        const raw=a.DateTimeOriginal||a.DateTime;
+        const m=raw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/);
+        if(m) g('eDate').value=`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+      }
+      renderFrame();
+    });
+  } else renderFrame();
+  dropZone.style.display='none';
+  g('previewWrap').style.display='flex';
+  g('leftBottom').style.display='flex';
+}
+
+function scheduleRender(){ if(renderTimer)clearTimeout(renderTimer); renderTimer=setTimeout(renderFrame,80); }
+
+function getFontSize(){ return Math.max(8,parseInt(g('fontSizePx').value)||14); }
+function getLineH(fs){ return fs*1.6; }
+
+// プレビュー用（表示サイズに縮小）
+function renderFrame(){
+  if(!currentImage)return;
+  const img=currentImage;
+  const maxDim=1600;
+  let iw=img.naturalWidth, ih=img.naturalHeight;
+  if(iw>maxDim||ih>maxDim){ const s=maxDim/Math.max(iw,ih); iw=Math.round(iw*s); ih=Math.round(ih*s); }
+  const fs=getFontSize();
+  const fontStr=`${fontWeight} ${fs}px '${currentFont}',monospace`;
+  if(currentStyle==='overlay') renderOverlay(img,iw,ih,fs,fontStr,previewCanvas,ctx);
+  else if(currentStyle==='polaroid') renderPolaroid(img,iw,ih,fs,previewCanvas,ctx);
+  else if(currentStyle==='banner') renderBanner(img,iw,ih,fs,fontStr,previewCanvas,ctx);
+}
+
+// 保存用（フル解像度）
+// 方針: プレビューcanvasの内容を元解像度にスケールアップして描画する
+// これによりフレームの比率・レイアウトがプレビューと完全に一致する
+function renderFullRes(){
+  if(!currentImage)return null;
+  const img=currentImage;
+  const origW=img.naturalWidth, origH=img.naturalHeight;
+
+  // プレビューcanvasのサイズを基準にスケール比を算出
+  const prevW=previewCanvas.width, prevH=previewCanvas.height;
+  if(prevW===0||prevH===0) return null;
+
+  // プレビューで使った画像サイズを逆算
+  const maxDim=1600;
+  let previewIw=origW, previewIh=origH;
+  if(previewIw>maxDim||previewIh>maxDim){
+    const s=maxDim/Math.max(previewIw,previewIh);
+    previewIw=Math.round(previewIw*s); previewIh=Math.round(previewIh*s);
+  }
+  // プレビューcanvas全体 vs 元解像度canvas全体のスケール比
+  // （フレームを含む全体サイズの比）
+  const scaleW=origW/previewIw; // 画像部分の倍率
+  const exportW=Math.round(prevW*scaleW);
+  const exportH=Math.round(prevH*scaleW);
+
+  const exportCanvas=document.createElement('canvas');
+  exportCanvas.width=exportW; exportCanvas.height=exportH;
+  const exportCtx=exportCanvas.getContext('2d');
+
+  // プレビューcanvasをそのままスケールアップして描画
+  exportCtx.drawImage(previewCanvas, 0, 0, exportW, exportH);
+
+  // 文字だけはフル解像度で再描画してシャープにする
+  const fs=Math.round(getFontSize()*scaleW);
+  const fontStr=`${fontWeight} ${fs}px '${currentFont}',monospace`;
+
+  // 各スタイルのテキスト部分のみ再描画
+  if(currentStyle==='polaroid'){
+    // polaroidのテキスト領域を再描画
+    const side=Math.round(parseInt(g('polSide').value)*scaleW);
+    const polBottom=Math.round(parseInt(g('polBottom').value)*scaleW);
+    const fc=polCustomColor||getChip('pl-c');
+    const isLight=isLightColor(fc);
+    const mainColor=isLight?textColor:'#ddd';
+    const subColor=isLight?blendColor(textColor,0.45):'#999';
+    const {topLine,bottomLine,extra}=getPolaroidLines();
+    const topFs=Math.round(fs*1.1), botFs=Math.round(fs*0.88), extraFs=Math.round(fs*0.82);
+    const topFont=`700 ${topFs}px '${currentFont}',monospace`;
+    const botFont=`${fontWeight} ${botFs}px '${currentFont}',monospace`;
+    const extraFont=`${fontWeight} ${extraFs}px '${currentFont}',monospace`;
+    const textLines=[];
+    if(topLine) textLines.push({text:topLine,font:topFont,color:mainColor,lh:topFs*1.5});
+    if(bottomLine) textLines.push({text:bottomLine,font:botFont,color:subColor,lh:botFs*1.5});
+    extra.forEach(t=>textLines.push({text:t,font:extraFont,color:subColor,lh:extraFs*1.5}));
+    const totalTextH=textLines.reduce((a,l)=>a+l.lh,0);
+    const minBottom=Math.max(polBottom,totalTextH+fs*2);
+    const textAreaY=Math.round(origH*scaleW)+side;
+    const startY=textAreaY+(minBottom-totalTextH)/2;
+    // テキスト領域を塗り直してから再描画
+    exportCtx.fillStyle=fc;
+    exportCtx.fillRect(0,textAreaY,exportW,minBottom);
+    exportCtx.textBaseline='top'; exportCtx.textAlign='center';
+    let curY=startY;
+    textLines.forEach(l=>{exportCtx.font=l.font;exportCtx.fillStyle=l.color;exportCtx.fillText(l.text,exportW/2,curY);curY+=l.lh;});
+  } else if(currentStyle==='overlay'){
+    const ohPct=parseInt(g('overlayHeight').value)/100;
+    const iw=origW, ih=origH;
+    const overlayH=Math.round(ih*ohPct);
+    const bgType=getSegVal('overlayBgSeg').bg||'gradient';
+    const isTop=getSegVal('overlayPosSeg').pos==='top';
+    const oy=isTop?0:ih-overlayH;
+    // グラデ/帯を再描画
+    if(bgType==='gradient'){
+      const gr=exportCtx.createLinearGradient(0,isTop?oy:oy+overlayH,0,isTop?oy+overlayH:oy);
+      gr.addColorStop(0,'rgba(0,0,0,0.78)');gr.addColorStop(1,'rgba(0,0,0,0)');
+      exportCtx.fillStyle=gr;exportCtx.fillRect(0,oy,iw,overlayH);
+    }else if(bgType==='band'){
+      const op=parseInt(g('bandOpacity').value)/100;
+      exportCtx.fillStyle=hexToRgba(getChip('band-c'),op);exportCtx.fillRect(0,oy,iw,overlayH);
+    }
+    const lines=getOverlayLines();
+    if(lines.length>0){
+      const lineH=fs*1.6, pad=fs*0.9;
+      const ty=isTop?oy+pad:oy+overlayH-lines.length*lineH-pad;
+      exportCtx.textBaseline='top';
+      lines.forEach((l,i)=>{exportCtx.font=fontStr;exportCtx.fillStyle=i===0?'#ffffff':blendColor('#ffffff',0.7);exportCtx.textAlign='left';exportCtx.fillText(l.text,fs,ty+i*lineH);});
+    }
+  } else if(currentStyle==='banner'){
+    const bh=Math.round(parseInt(g('bannerHeight').value)*scaleW);
+    const iw=origW, ih=origH;
+    const bannerColor=bannerCustomColor||getChip('bn-c');
+    const isLight=isLightColor(bannerColor);
+    const mainColor=isLight?textColor:'#f0ece4';
+    const subColor=isLight?blendColor(textColor,0.45):'#888880';
+    const pad=Math.round(iw*0.025), cy=ih+bh/2;
+    exportCtx.fillStyle=bannerColor;exportCtx.fillRect(0,ih,iw,bh);
+    exportCtx.strokeStyle=isLight?'rgba(0,0,0,0.07)':'rgba(255,255,255,0.1)';
+    exportCtx.lineWidth=Math.round(scaleW);exportCtx.beginPath();exportCtx.moveTo(0,ih);exportCtx.lineTo(iw,ih);exportCtx.stroke();
+    const camText=g('showCamera').checked?fmtCamera():'';
+    const lensName=g('showLens').checked?g('eLens').value:'';
+    const settingsText=g('showSettings').checked?getSettingsText():'';
+    const dateText=g('showDate').checked?fmtDateTime():'';
+    const camFs=Math.round(fs*1.25),lensFs=Math.round(fs*0.85),settingsFs=Math.round(fs*1.1),dateFs=Math.round(fs*0.82);
+    exportCtx.textBaseline='middle';
+    if(camText&&lensName){
+      exportCtx.font=`700 ${camFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='left';exportCtx.fillText(camText,pad,cy-lensFs*0.65);
+      exportCtx.font=`${fontWeight} ${lensFs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.fillText(lensName,pad,cy+camFs*0.5);
+    }else if(camText){exportCtx.font=`700 ${camFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='left';exportCtx.fillText(camText,pad,cy);}
+    else if(lensName){exportCtx.font=`${fontWeight} ${fs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.textAlign='left';exportCtx.fillText(lensName,pad,cy);}
+    if(settingsText&&dateText){
+      exportCtx.font=`700 ${settingsFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='right';exportCtx.fillText(settingsText,iw-pad,cy-dateFs*0.65);
+      exportCtx.font=`${fontWeight} ${dateFs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.fillText(dateText,iw-pad,cy+settingsFs*0.5);
+    }else if(settingsText){exportCtx.font=`700 ${settingsFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='right';exportCtx.fillText(settingsText,iw-pad,cy);}
+    else if(dateText){exportCtx.font=`${fontWeight} ${dateFs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.textAlign='right';exportCtx.fillText(dateText,iw-pad,cy);}
+  }
+
+  return exportCanvas;
+}
+
+function renderOverlay(img,iw,ih,fs,fontStr,canvas,c){
+  const lines=getOverlayLines();
+  canvas.width=iw; canvas.height=ih;
+  c.drawImage(img,0,0,iw,ih);
+  const ohPct=parseInt(g('overlayHeight').value)/100;
+  const overlayH=Math.round(ih*ohPct);
+  const bgType=getSegVal('overlayBgSeg').bg||'gradient';
+  const isTop=getSegVal('overlayPosSeg').pos==='top';
+  const oy=isTop?0:ih-overlayH;
+  if(bgType==='gradient'){
+    const gr=c.createLinearGradient(0,isTop?oy:oy+overlayH,0,isTop?oy+overlayH:oy);
+    gr.addColorStop(0,'rgba(0,0,0,0.78)');gr.addColorStop(1,'rgba(0,0,0,0)');
+    c.fillStyle=gr;c.fillRect(0,oy,iw,overlayH);
+  }else if(bgType==='band'){
+    const op=parseInt(g('bandOpacity').value)/100;
+    c.fillStyle=hexToRgba(getChip('band-c'),op);c.fillRect(0,oy,iw,overlayH);
+  }
+  if(lines.length>0){
+    const lineH=getLineH(fs),pad=fs*0.9;
+    const ty=isTop?oy+pad:oy+overlayH-lines.length*lineH-pad;
+    c.textBaseline='top';
+    lines.forEach((l,i)=>{c.font=fontStr;c.fillStyle=i===0?'#ffffff':blendColor('#ffffff',0.7);c.textAlign='left';c.fillText(l.text,fs,ty+i*lineH);});
+  }
+}
+
+function renderPolaroid(img,iw,ih,fs,canvas,c){
+  const side=parseInt(g('polSide').value);
+  const bottom=parseInt(g('polBottom').value);
+  const fc=polCustomColor||getChip('pl-c');
+  const isLight=isLightColor(fc);
+  const mainColor=isLight?textColor:'#ddd';
+  const subColor=isLight?blendColor(textColor,0.45):'#999';
+
+  const {topLine, bottomLine, extra}=getPolaroidLines();
+
+  // フォント設定
+  const topFs=Math.round(fs*1.1);
+  const botFs=Math.round(fs*0.88);
+  const extraFs=Math.round(fs*0.82);
+  const topFont=`700 ${topFs}px '${currentFont}',monospace`;
+  const botFont=`${fontWeight} ${botFs}px '${currentFont}',monospace`;
+  const extraFont=`${fontWeight} ${extraFs}px '${currentFont}',monospace`;
+
+  // テキスト行を構築
+  const textLines=[];
+  if(topLine) textLines.push({text:topLine,font:topFont,color:mainColor});
+  if(bottomLine) textLines.push({text:bottomLine,font:botFont,color:subColor});
+  extra.forEach(t=>textLines.push({text:t,font:extraFont,color:subColor}));
+
+  // 行高計算
+  const lineHeights=textLines.map((l,i)=>{
+    if(i===0) return topFs*1.5;
+    return (i===1&&topLine)?botFs*1.5:extraFs*1.5;
+  });
+  const totalTextH=lineHeights.reduce((a,b)=>a+b,0);
+  const minBottom=Math.max(bottom, totalTextH+fs*2);
+
+  const cw=iw+side*2, ch=ih+side+minBottom;
+  canvas.width=cw; canvas.height=ch;
+  c.fillStyle=fc; c.fillRect(0,0,cw,ch);
+  c.drawImage(img,side,side,iw,ih);
+
+  // テキスト描画（垂直中央）
+  const textAreaY=side+ih;
+  const startY=textAreaY+(minBottom-totalTextH)/2;
+  c.textBaseline='top'; c.textAlign='center';
+  let curY=startY;
+  textLines.forEach((l,i)=>{
+    c.font=l.font; c.fillStyle=l.color;
+    c.fillText(l.text,cw/2,curY);
+    curY+=lineHeights[i];
+  });
+}
+
+function renderBanner(img,iw,ih,fs,fontStr,canvas,c){
+  const bh=parseInt(g('bannerHeight').value);
+  const bannerColor=bannerCustomColor||getChip('bn-c');
+  const isLight=isLightColor(bannerColor);
+  const mainColor=isLight?textColor:'#f0ece4';
+  const subColor=isLight?blendColor(textColor,0.45):'#888880';
+  const pad=Math.round(iw*0.025),cy=ih+bh/2;
+  canvas.width=iw; canvas.height=ih+bh;
+  c.drawImage(img,0,0,iw,ih);
+  c.fillStyle=bannerColor;c.fillRect(0,ih,iw,bh);
+  c.strokeStyle=isLight?'rgba(0,0,0,0.07)':'rgba(255,255,255,0.1)';
+  c.lineWidth=1;c.beginPath();c.moveTo(0,ih);c.lineTo(iw,ih);c.stroke();
+  const camText=g('showCamera').checked?fmtCamera():'';
+  const lensName=g('showLens').checked?g('eLens').value:'';
+  const settingsText=g('showSettings').checked?getSettingsText():'';
+  const dateText=g('showDate').checked?fmtDateTime():'';
+  const camFs=Math.round(fs*1.25),lensFs=Math.round(fs*0.85),settingsFs=Math.round(fs*1.1),dateFs=Math.round(fs*0.82);
+  c.textBaseline='middle';
+  if(camText&&lensName){
+    c.font=`700 ${camFs}px '${currentFont}',monospace`;c.fillStyle=mainColor;c.textAlign='left';c.fillText(camText,pad,cy-lensFs*0.65);
+    c.font=`${fontWeight} ${lensFs}px '${currentFont}',monospace`;c.fillStyle=subColor;c.fillText(lensName,pad,cy+camFs*0.5);
+  }else if(camText){c.font=`700 ${camFs}px '${currentFont}',monospace`;c.fillStyle=mainColor;c.textAlign='left';c.fillText(camText,pad,cy);}
+  else if(lensName){c.font=`${fontWeight} ${fs}px '${currentFont}',monospace`;c.fillStyle=subColor;c.textAlign='left';c.fillText(lensName,pad,cy);}
+  if(settingsText&&dateText){
+    c.font=`700 ${settingsFs}px '${currentFont}',monospace`;c.fillStyle=mainColor;c.textAlign='right';c.fillText(settingsText,iw-pad,cy-dateFs*0.65);
+    c.font=`${fontWeight} ${dateFs}px '${currentFont}',monospace`;c.fillStyle=subColor;c.fillText(dateText,iw-pad,cy+settingsFs*0.5);
+  }else if(settingsText){c.font=`700 ${settingsFs}px '${currentFont}',monospace`;c.fillStyle=mainColor;c.textAlign='right';c.fillText(settingsText,iw-pad,cy);}
+  else if(dateText){c.font=`${fontWeight} ${dateFs}px '${currentFont}',monospace`;c.fillStyle=subColor;c.textAlign='right';c.fillText(dateText,iw-pad,cy);}
+}
+
+function hexToRgba(hex,alpha){try{const r=parseInt(hex.slice(1,3),16),gv=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgba(${r},${gv},${b},${alpha})`;}catch{return`rgba(0,0,0,${alpha})`;}}
+function blendColor(hex,op){try{const r=parseInt(hex.slice(1,3),16),gv=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgb(${Math.round(r+(255-r)*(1-op))},${Math.round(gv+(255-gv)*(1-op))},${Math.round(b+(255-b)*(1-op))})`;}catch{return hex;}}
+function isLightColor(hex){try{const r=parseInt(hex.slice(1,3),16),gv=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return(r*299+gv*587+b*114)/1000>128;}catch{return true;}}
+
+g('downloadBtn').addEventListener('click',()=>{
+  const exportCanvas=renderFullRes();
+  if(!exportCanvas)return;
+  const l=document.createElement('a');
+  l.download='frame_'+Date.now()+'.jpg';
+  l.href=exportCanvas.toDataURL('image/jpeg',1.0);
+  l.click();
+});
+g('resetBtn').addEventListener('click',()=>{
+  currentImage=null;previewCanvas.width=0;
+  g('previewWrap').style.display='none';g('leftBottom').style.display='none';
+  dropZone.style.display='flex';fileInput.value='';
+  ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eLocation','eCustom'].forEach(id=>g(id).value='');
+  g('eDate').value='';
+});
+g('txtColorInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyTxtColorCode();});
+g('fontSizePx').addEventListener('keydown',e=>{if(e.key==='Enter'){clampFontSize();scheduleRender();}});
+g('bannerColorInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyBannerColor();});
+g('polColorInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyPolColor();});
+
+// ---- プリセット ----
+const PRESET_KEY='framelab_presets';
+
+function getPresets(){
+  try{ return JSON.parse(localStorage.getItem(PRESET_KEY)||'[]'); }catch{ return []; }
+}
+function savePresets(arr){ localStorage.setItem(PRESET_KEY, JSON.stringify(arr)); }
+
+function captureSettings(){
+  return {
+    // スタイル
+    style: currentStyle,
+    // フレーム系
+    polColor: polCustomColor||getChip('pl-c'),
+    polBottom: g('polBottom').value,
+    polSide: g('polSide').value,
+    bannerColor: bannerCustomColor||getChip('bn-c'),
+    bannerHeight: g('bannerHeight').value,
+    overlayHeight: g('overlayHeight').value,
+    overlayBg: getSegVal('overlayBgSeg').bg||'gradient',
+    overlayPos: getSegVal('overlayPosSeg').pos||'bottom',
+    bandOpacity: g('bandOpacity').value,
+    bandColor: getChip('band-c'),
+    // Exif表示トグル
+    showCamera: g('showCamera').checked,
+    showSettings: g('showSettings').checked,
+    showLens: g('showLens').checked,
+    showLocation: g('showLocation').checked,
+    showDate: g('showDate').checked,
+    showCustom: g('showCustom').checked,
+    // 文字
+    font: currentFont,
+    fontWeight: fontWeight,
+    fontSize: g('fontSizePx').value,
+    textColor: textColor,
+  };
+}
+
+function applySettings(s){
+  // スタイル切替
+  const styleBtn=document.querySelector(`.style-card[data-style="${s.style}"]`);
+  if(styleBtn) setStyle(s.style, styleBtn);
+  // フレーム
+  if(s.polColor){ polCustomColor=s.polColor; document.querySelectorAll('.color-chip.pl-c').forEach(c=>c.classList.remove('selected')); g('polColorInput').value=s.polColor.replace('#',''); }
+  if(s.polBottom){ g('polBottom').value=s.polBottom; g('polBottomVal').textContent=s.polBottom+'px'; }
+  if(s.polSide){ g('polSide').value=s.polSide; g('polSideVal').textContent=s.polSide+'px'; }
+  if(s.bannerColor){ bannerCustomColor=s.bannerColor; document.querySelectorAll('.color-chip.bn-c').forEach(c=>c.classList.remove('selected')); g('bannerColorInput').value=s.bannerColor.replace('#',''); }
+  if(s.bannerHeight){ g('bannerHeight').value=s.bannerHeight; g('bannerHeightVal').textContent=s.bannerHeight+'px'; }
+  if(s.overlayHeight){ g('overlayHeight').value=s.overlayHeight; g('overlayHeightVal').textContent=s.overlayHeight+'%'; }
+  if(s.bandOpacity){ g('bandOpacity').value=s.bandOpacity; g('bandOpacityVal').textContent=s.bandOpacity+'%'; }
+  // Exifトグル
+  ['showCamera','showSettings','showLens','showLocation','showDate','showCustom'].forEach(id=>{ if(s[id]!==undefined) g(id).checked=s[id]; });
+  // 文字
+  if(s.font){ currentFont=s.font; }
+  if(s.fontWeight){ fontWeight=s.fontWeight; document.querySelectorAll('[data-weight]').forEach(b=>b.classList.remove('active')); const wb=document.querySelector(`[data-weight="${s.fontWeight}"]`); if(wb)wb.classList.add('active'); }
+  if(s.fontSize){ g('fontSizePx').value=s.fontSize; g('fontSizeSlider').value=s.fontSize; }
+  if(s.textColor){ textColor=s.textColor; g('txtColorInput').value=s.textColor.replace('#',''); document.querySelectorAll('.color-chip.tc').forEach(c=>c.classList.remove('selected')); }
+  scheduleRender();
+}
+
+function savePreset(){
+  const name=g('presetName').value.trim();
+  if(!name){ g('presetName').style.borderColor='var(--text-danger)'; setTimeout(()=>g('presetName').style.borderColor='',1200); return; }
+  const arr=getPresets();
+  arr.unshift({name, settings: captureSettings(), id: Date.now()});
+  savePresets(arr.slice(0,10)); // 最大10件
+  g('presetName').value='';
+  renderPresetList();
+}
+
+function deletePreset(id){
+  savePresets(getPresets().filter(p=>p.id!==id));
+  renderPresetList();
+}
+
+function renderPresetList(){
+  const list=g('presetList');
+  const arr=getPresets();
+  if(arr.length===0){
+    list.innerHTML='<div class="preset-empty">保存済みのプリセットはありません</div>';
+    return;
+  }
+  list.innerHTML=arr.map(p=>`
+    <div class="preset-item" onclick="applySettings(${JSON.stringify(p.settings).replace(/"/g,'&quot;')})">
+      <span class="preset-name">${p.name}</span>
+      <span class="preset-del" onclick="event.stopPropagation();deletePreset(${p.id})" title="削除">×</span>
+    </div>
+  `).join('');
+}
+
+// 初期化
+renderPresetList();
+</script>
+</body>
+</html>
