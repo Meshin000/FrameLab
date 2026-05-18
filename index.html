@@ -448,7 +448,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 </div>
 
 <input type="file" id="fileInput" accept="image/*">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 <script>
 const g = id => document.getElementById(id);
 let currentImage=null, currentStyle='polaroid', currentFont='DM Mono', fontWeight='400', textColor='#1a1a1a';
@@ -575,32 +575,42 @@ function loadFile(file){
   r.readAsDataURL(file);
 }
 
-function extractExif(file,img){
-  if(typeof EXIF!=='undefined'){
-    EXIF.getData(img,function(){
-      const a=EXIF.getAllTags(this)||{};
-      if(a.Make) g('eMake').value=a.Make.trim();
-      if(a.Model) g('eModel').value=a.Model.trim();
-      if(a.FNumber){ const fn=typeof a.FNumber==='object'?a.FNumber.numerator/a.FNumber.denominator:a.FNumber; g('eAperture').value=parseFloat(fn.toFixed(1)); }
-      if(a.ExposureTime){
-        const et=typeof a.ExposureTime==='object'?a.ExposureTime.numerator/a.ExposureTime.denominator:a.ExposureTime;
-        if(et>=1){g('eSSNum').value=Math.round(et);g('eShutterDenom').value=1;}
-        else{g('eSSNum').value=1;g('eShutterDenom').value=Math.round(1/et);}
-      }
-      if(a.ISOSpeedRatings) g('eIso').value=a.ISOSpeedRatings;
-      if(a.LensModel) g('eLens').value=a.LensModel;
-      if(a.FocalLength){
-        const fl=typeof a.FocalLength==='object'?a.FocalLength.numerator/a.FocalLength.denominator:a.FocalLength;
-        g('eFocal').value=Math.round(fl);
-      }
-      if(a.DateTimeOriginal||a.DateTime){
-        const raw=a.DateTimeOriginal||a.DateTime;
-        const m=raw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/);
-        if(m) g('eDate').value=`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
-      }
-      renderFrame();
-    });
-  } else renderFrame();
+async function extractExif(file,img){
+  try {
+    const a = await exifr.parse(file, {
+      tiff: true, exif: true, iptc: false, xmp: false, icc: false,
+      translateKeys: true, translateValues: false, reviveValues: true,
+    }) || {};
+
+    if(a.Make) g('eMake').value = a.Make.trim();
+    if(a.Model) g('eModel').value = a.Model.trim();
+
+    if(a.FNumber != null) g('eAperture').value = parseFloat(parseFloat(a.FNumber).toFixed(1));
+
+    if(a.ExposureTime != null){
+      const et = a.ExposureTime;
+      if(et >= 1){ g('eSSNum').value = Math.round(et); g('eShutterDenom').value = 1; }
+      else{ g('eSSNum').value = 1; g('eShutterDenom').value = Math.round(1/et); }
+    }
+
+    if(a.ISO != null) g('eIso').value = a.ISO;
+    else if(a.ISOSpeedRatings != null) g('eIso').value = Array.isArray(a.ISOSpeedRatings) ? a.ISOSpeedRatings[0] : a.ISOSpeedRatings;
+
+    // レンズ情報: 複数タグをフォールバック
+    const lensName = a.LensModel || a.Lens || a.LensInfo || '';
+    if(lensName) g('eLens').value = lensName.trim();
+
+    if(a.FocalLength != null) g('eFocal').value = Math.round(a.FocalLength);
+
+    const dt = a.DateTimeOriginal || a.DateTime || a.CreateDate;
+    if(dt instanceof Date){
+      const pad = n => String(n).padStart(2,'0');
+      g('eDate').value = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    }
+  } catch(e) {
+    console.warn('exifr parse error:', e);
+  }
+  renderFrame();
   dropZone.style.display='none';
   g('previewWrap').style.display='flex';
   g('leftBottom').style.display='flex';
