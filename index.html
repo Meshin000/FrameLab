@@ -200,13 +200,41 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
   .workspace{grid-template-columns:1fr 300px;}
 }
 
+
+/* フッター */
+.app-footer{
+  flex-shrink:0;
+  padding:.5rem 1.5rem;
+  border-top:.5px solid var(--border-tertiary);
+  background:var(--bg-primary);
+  display:flex;align-items:center;justify-content:center;
+}
+.app-footer small{
+  font-size:10px;
+  color:var(--text-tertiary);
+  letter-spacing:.04em;
+  font-family:'DM Mono',monospace;
+}
+.app-footer a{
+  color:var(--text-tertiary);
+  text-decoration:none;
+  border-bottom:.5px solid var(--border-tertiary);
+  transition:color .12s,border-color .12s;
+}
+.app-footer a:hover{
+  color:var(--text-secondary);
+  border-color:var(--border-secondary);
+}
+@media(max-width:768px){
+  .app-footer{padding:.4rem 1rem;}
+}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="app-header">
     <div class="app-title">Frame Lab</div>
-    <div class="app-sub">v13 · EXIF-AWARE PHOTO FRAMER</div>
+    <div class="app-sub">v1.1.1 · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
@@ -518,6 +546,11 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
       <div style="height:4px;flex-shrink:0;"></div>
     </div>
   </div>
+
+  <footer class="app-footer">
+    <small>Created by <a href="https://lit.link/meshin" target="_blank" rel="noopener">Meshin</a></small>
+  </footer>
+
 </div>
 
 <!-- フローティングボタン群（モバイル用） -->
