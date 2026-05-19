@@ -41,8 +41,21 @@ body{font-family:'DM Mono',monospace;background:var(--bg-tertiary);color:var(--t
 .drop-icon{font-size:36px;color:var(--text-tertiary);}
 .drop-label{font-size:12px;color:var(--text-secondary);line-height:1.7;}
 .drop-label span{color:var(--text-info);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
-.preview-wrap{flex:1;display:none;align-items:center;justify-content:center;overflow:hidden;width:100%;min-height:0;}
-canvas#preview{max-width:100%;max-height:100%;display:block;border-radius:2px;}
+.preview-wrap{flex:1;display:none;align-items:center;justify-content:center;overflow:hidden;width:100%;min-height:0;position:relative;cursor:grab;user-select:none;touch-action:none;}
+.preview-wrap.grabbing{cursor:grabbing;}
+canvas#preview{max-width:100%;max-height:100%;display:block;border-radius:2px;transform-origin:center center;transition:none;will-change:transform;}
+
+/* ズームリセットボタン */
+.zoom-reset{
+  position:absolute;bottom:8px;right:8px;
+  display:none;
+  padding:4px 8px;font-family:'DM Mono',monospace;font-size:10px;
+  background:rgba(0,0,0,.45);color:#fff;border:none;border-radius:var(--radius-md);
+  cursor:pointer;backdrop-filter:blur(4px);letter-spacing:.04em;
+  transition:opacity .15s;
+}
+.zoom-reset:hover{opacity:.8;}
+.preview-wrap.zoomed .zoom-reset{display:block;}
 .left-bottom{display:none;justify-content:center;gap:8px;flex-shrink:0;width:100%;}
 #fileInput{display:none;}
 
@@ -128,6 +141,65 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 .preset-del{font-size:16px;line-height:1;color:var(--text-tertiary);cursor:pointer;padding:0 2px;flex-shrink:0;}
 .preset-del:hover{color:var(--text-danger);}
 .preset-empty{font-size:11px;color:var(--text-tertiary);text-align:center;padding:8px 0;}
+
+/* ========== レスポンシブ対応 ========== */
+
+.fab-group{
+  display:none;position:fixed;bottom:20px;right:16px;z-index:100;
+  flex-direction:row;gap:10px;align-items:center;
+}
+.fab-btn{
+  width:50px;height:50px;border-radius:50%;
+  background:var(--bg-primary);color:var(--text-primary);
+  border:.5px solid var(--border-secondary);cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,0.15);
+  font-size:20px;display:flex;align-items:center;justify-content:center;
+  transition:opacity .15s,transform .15s;
+}
+.fab-btn-primary{
+  background:var(--text-primary);color:var(--bg-primary);
+  border-color:var(--text-primary);
+}
+.fab-btn:hover{opacity:.82;transform:scale(1.06);}
+.fab-btn:active{transform:scale(.94);}
+
+@media(max-width:768px){
+  html,body{height:auto;}
+  .app{height:auto;min-height:100dvh;}
+  .app-header{padding:.6rem 1rem;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+  .app-sub{display:none;}
+  .workspace{display:flex;flex-direction:column;grid-template-columns:unset;overflow:visible;min-height:unset;}
+  .left-panel{border-right:none;border-bottom:.5px solid var(--border-tertiary);padding:.5rem .75rem .5rem;gap:4px;min-height:52vw;position:sticky;top:var(--header-h,46px);z-index:40;background:var(--bg-secondary);}
+  .right-panel{overflow-y:visible;height:auto;padding-bottom:80px;}
+  .drop-zone{min-height:40vw;padding:1.5rem;}
+  /* スマホではパネル内ボタンを非表示（FABで代替） */
+  .left-bottom{display:none !important;}
+  /* drop-zoneの「別の写真」テキストも非表示 */
+  .fab-group{display:flex;}
+  .ei,.font-select{font-size:14px !important;padding:7px 8px !important;}
+  .nf-input{font-size:14px !important;padding:7px 4px 7px 2px !important;}
+  input[type=datetime-local]{font-size:14px !important;padding:7px 8px !important;}
+  input[type=range]{height:6px;}
+  .toggle{width:36px;height:20px;}
+  .slider-toggle:before{width:14px;height:14px;}
+  .toggle input:checked+.slider-toggle:before{transform:translateX(16px);}
+  .color-chip{width:26px;height:26px;}
+  .seg-btn{padding:9px 4px;font-size:11px;}
+  .style-card-label{font-size:11px;padding:5px 0 6px;}
+  .preset-item{padding:10px 12px;}
+  .preset-name{font-size:12px;}
+  .section-block{padding-bottom:1.2rem;gap:10px;}
+}
+
+@media(max-width:480px){
+  .app-title{font-size:17px;}
+  .left-panel{min-height:58vw;}
+}
+
+@media(min-width:769px) and (max-width:1024px){
+  .workspace{grid-template-columns:1fr 300px;}
+}
+
 </style>
 </head>
 <body>
@@ -148,6 +220,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
       </div>
       <div class="preview-wrap" id="previewWrap">
         <canvas id="preview"></canvas>
+        <button class="zoom-reset" id="zoomReset">リセット</button>
       </div>
       <div class="left-bottom" id="leftBottom">
         <button class="reset-btn" id="resetBtn"><i class="ti ti-refresh" style="font-size:13px;"></i> 別の写真</button>
@@ -447,6 +520,16 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
   </div>
 </div>
 
+<!-- フローティングボタン群（モバイル用） -->
+<div class="fab-group" id="fabGroup" style="display:none;">
+  <button class="fab-btn" id="fabSelect" title="写真を選択" onclick="document.getElementById('fileInput').click()">
+    <i class="ti ti-photo-plus" aria-hidden="true"></i>
+  </button>
+  <button class="fab-btn fab-btn-primary" id="fabSave" title="保存">
+    <i class="ti ti-download" aria-hidden="true"></i>
+  </button>
+</div>
+
 <input type="file" id="fileInput" accept="image/*">
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 <script>
@@ -611,9 +694,13 @@ async function extractExif(file,img){
     console.warn('exifr parse error:', e);
   }
   renderFrame();
+  document.dispatchEvent(new Event('framerendered'));
   dropZone.style.display='none';
   g('previewWrap').style.display='flex';
   g('leftBottom').style.display='flex';
+  // FABグループを表示（モバイル）
+  const fabGrp = document.getElementById('fabGroup');
+  if(fabGrp && window.innerWidth <= 768) fabGrp.style.display = 'flex';
 }
 
 function scheduleRender(){ if(renderTimer)clearTimeout(renderTimer); renderTimer=setTimeout(renderFrame,80); }
@@ -874,6 +961,7 @@ g('resetBtn').addEventListener('click',()=>{
   currentImage=null;previewCanvas.width=0;
   g('previewWrap').style.display='none';g('leftBottom').style.display='none';
   dropZone.style.display='flex';fileInput.value='';
+  const fabGrp2 = document.getElementById('fabGroup'); if(fabGrp2) fabGrp2.style.display='none';
   ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eLocation','eCustom'].forEach(id=>g(id).value='');
   g('eDate').value='';
 });
@@ -974,6 +1062,188 @@ function renderPresetList(){
 
 // 初期化
 renderPresetList();
+
+// ヘッダー高さをCSS変数にセット（stickyのtopを正確に合わせる）
+function syncHeaderHeight(){
+  const h = document.querySelector('.app-header');
+  if(h) document.documentElement.style.setProperty('--header-h', h.offsetHeight + 'px');
+}
+syncHeaderHeight();
+window.addEventListener('resize', syncHeaderHeight);
+
+// フローティングボタン群（モバイル用）
+const fabGroup = document.getElementById('fabGroup');
+const fabSave = document.getElementById('fabSave');
+
+// 保存ボタン
+if(fabSave){
+  fabSave.addEventListener('click', ()=>{
+    const exportCanvas = renderFullRes();
+    if(!exportCanvas) return;
+    const l = document.createElement('a');
+    l.download = 'frame_' + Date.now() + '.jpg';
+    l.href = exportCanvas.toDataURL('image/jpeg', 1.0);
+    l.click();
+  });
+}
+
+// ========== プレビュー拡大・縮小・ドラッグ ==========
+(function(){
+  const wrap = document.getElementById('previewWrap');
+  const canvas = document.getElementById('preview');
+  const resetBtn = document.getElementById('zoomReset');
+
+  let scale = 1, tx = 0, ty = 0;
+  let minScale = 1, maxScale = 8;
+  let isDragging = false, lastX = 0, lastY = 0;
+
+  function applyTransform(){
+    canvas.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+    if(scale > 1.01){
+      wrap.classList.add('zoomed');
+    } else {
+      wrap.classList.remove('zoomed');
+      tx = 0; ty = 0;
+    }
+  }
+
+  function clampTranslate(){
+    // canvasの表示サイズ
+    const cr = canvas.getBoundingClientRect();
+    const wr = wrap.getBoundingClientRect();
+    // スケール後のcanvasサイズ
+    const cw = cr.width, ch = cr.height;
+    const ww = wr.width, wh = wr.height;
+    // はみ出しを許容する最大値（canvasの半分まで画面内に残す）
+    const maxTx = Math.max(0, (cw - ww) / 2 + cw * 0.1);
+    const maxTy = Math.max(0, (ch - wh) / 2 + ch * 0.1);
+    tx = Math.max(-maxTx, Math.min(maxTx, tx));
+    ty = Math.max(-maxTy, Math.min(maxTy, ty));
+  }
+
+  function zoomAt(cx, cy, delta){
+    // cx, cy: wrap内の座標
+    const wr = wrap.getBoundingClientRect();
+    const ox = cx - wr.left - wr.width/2;
+    const oy = cy - wr.top - wr.height/2;
+    const prevScale = scale;
+    scale = Math.min(maxScale, Math.max(minScale, scale * delta));
+    // ズーム中心に合わせてtranslateを補正
+    tx += ox * (1 - scale/prevScale);
+    ty += oy * (1 - scale/prevScale);
+    clampTranslate();
+    applyTransform();
+  }
+
+  function resetZoom(){
+    scale = 1; tx = 0; ty = 0;
+    applyTransform();
+  }
+
+  // ---- PC: マウスホイール ----
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1.15 : 1/1.15;
+    zoomAt(e.clientX, e.clientY, delta);
+  }, {passive:false});
+
+  // ---- PC: ドラッグ ----
+  wrap.addEventListener('mousedown', e => {
+    if(scale <= 1.01) return;
+    isDragging = true;
+    lastX = e.clientX; lastY = e.clientY;
+    wrap.classList.add('grabbing');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if(!isDragging) return;
+    tx += e.clientX - lastX;
+    ty += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    clampTranslate();
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    wrap.classList.remove('grabbing');
+  });
+
+  // ---- スマホ: ピンチ＆ドラッグ ----
+  let touches = [];
+  let initDist = 0, initScale = 1;
+  let initMidX = 0, initMidY = 0;
+  let initTx = 0, initTy = 0;
+  let singleStart = {x:0, y:0};
+
+  function getTouchDist(t){
+    const dx = t[0].clientX - t[1].clientX;
+    const dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+  function getTouchMid(t){
+    return {
+      x: (t[0].clientX + t[1].clientX)/2,
+      y: (t[0].clientY + t[1].clientY)/2,
+    };
+  }
+
+  wrap.addEventListener('touchstart', e => {
+    touches = Array.from(e.touches);
+    if(touches.length === 2){
+      e.preventDefault();
+      initDist = getTouchDist(touches);
+      initScale = scale;
+      const mid = getTouchMid(touches);
+      initMidX = mid.x; initMidY = mid.y;
+      initTx = tx; initTy = ty;
+    } else if(touches.length === 1 && scale > 1.01){
+      singleStart = {x: touches[0].clientX - tx, y: touches[0].clientY - ty};
+    }
+  }, {passive:false});
+
+  wrap.addEventListener('touchmove', e => {
+    touches = Array.from(e.touches);
+    if(touches.length === 2){
+      e.preventDefault();
+      const dist = getTouchDist(touches);
+      const mid = getTouchMid(touches);
+      const newScale = Math.min(maxScale, Math.max(minScale, initScale * dist/initDist));
+      const wr = wrap.getBoundingClientRect();
+      const ox = initMidX - wr.left - wr.width/2;
+      const oy = initMidY - wr.top - wr.height/2;
+      scale = newScale;
+      tx = initTx + ox*(1 - scale/initScale) + (mid.x - initMidX);
+      ty = initTy + oy*(1 - scale/initScale) + (mid.y - initMidY);
+      clampTranslate();
+      applyTransform();
+    } else if(touches.length === 1 && scale > 1.01){
+      e.preventDefault();
+      tx = touches[0].clientX - singleStart.x;
+      ty = touches[0].clientY - singleStart.y;
+      clampTranslate();
+      applyTransform();
+    }
+  }, {passive:false});
+
+  wrap.addEventListener('touchend', e => {
+    touches = Array.from(e.touches);
+    if(touches.length === 1 && scale > 1.01){
+      singleStart = {x: touches[0].clientX - tx, y: touches[0].clientY - ty};
+    }
+  });
+
+  // リセットボタン
+  if(resetBtn) resetBtn.addEventListener('click', resetZoom);
+
+  // 写真が変わったらリセット
+  const origReset = g('resetBtn').onclick;
+  g('resetBtn').addEventListener('click', resetZoom);
+
+  // renderFrame後もリセット（新しい写真が来たとき）
+  const origExtract = window._afterExtract;
+  document.addEventListener('framerendered', resetZoom);
+})();
+
 </script>
 </body>
 </html>
