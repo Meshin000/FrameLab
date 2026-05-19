@@ -91,6 +91,17 @@ input[type=range]{width:100%;height:4px;accent-color:var(--text-primary);cursor:
 .color-chip{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .1s;flex-shrink:0;}
 .color-chip:hover{transform:scale(1.15);}
 .color-chip.selected{border-color:var(--text-primary);}
+/* カラーピッカーボタン */
+.color-picker-btn{width:20px;height:20px;border-radius:50%;cursor:pointer;border:.5px solid var(--border-secondary);overflow:hidden;flex-shrink:0;position:relative;transition:transform .1s;}
+.color-picker-btn:hover{transform:scale(1.15);}
+.color-picker-btn input[type=color]{position:absolute;inset:-4px;width:calc(100%+8px);height:calc(100%+8px);opacity:0;cursor:pointer;border:none;padding:0;}
+/* 余白の数値入力 */
+.margin-ctrl{display:flex;flex-direction:column;gap:4px;}
+.margin-ctrl-header{display:flex;justify-content:space-between;align-items:center;}
+.margin-num{width:50px;text-align:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:500;padding:2px 4px;border:.5px solid var(--border-secondary);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);}
+.margin-num::-webkit-inner-spin-button,.margin-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+.margin-num[type=number]{-moz-appearance:textfield;}
+.margin-num:focus{outline:none;border-color:var(--border-primary);}
 
 .ei{font-family:'DM Mono',monospace;font-size:11px;padding:4px 6px;border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);width:100%;}
 .ei:focus{outline:none;border-color:var(--border-primary);}
@@ -336,23 +347,35 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
         <div id="polaroidOpts" class="opts visible">
           <div class="ctrl-label">フレームカラー</div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
-            <div class="color-chip pl-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
-            <div class="color-chip pl-c" data-color="#f5f0e8" style="background:#f5f0e8;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
-            <div class="color-chip pl-c" data-color="#1a1a1a" style="background:#1a1a1a;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
-            <div class="color-chip pl-c" data-color="#f0e6d3" style="background:#f0e6d3;" onclick="selectChip(this,'pl-c');scheduleRender()"></div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+            <div class="color-chip pl-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="pickChip('pol','#ffffff','ffffff',this)"></div>
+            <div class="color-chip pl-c" data-color="#000000" style="background:#000;" onclick="pickChip('pol','#000000','000000',this)"></div>
+            <div class="color-picker-btn" title="カラーピッカー"><input type="color" id="polColorPicker" value="#ffffff" oninput="onColorPicker('pol',this.value)"><i class="ti ti-color-picker" style="font-size:12px;color:var(--text-tertiary);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;" aria-hidden="true"></i></div>
             <span style="font-size:11px;color:var(--text-tertiary);">#</span>
-            <input type="text" id="polColorInput" class="ei" placeholder="ffffff" value="ffffff" maxlength="7" style="max-width:100px;">
-            <button class="apply-btn" onclick="applyPolColor()">適用</button>
+            <input type="text" id="polColorInput" class="ei" placeholder="ffffff" value="ffffff" maxlength="7" style="max-width:90px;" oninput="onColorHexInput('pol',this.value)">
           </div>
-          <div class="ctrl-row">
-            <div class="ctrl-header"><span class="ctrl-label">下余白</span><span class="ctrl-val" id="polBottomVal">120px</span></div>
-            <input type="range" min="60" max="260" value="120" id="polBottom" step="5">
+          <div class="margin-ctrl">
+            <div class="margin-ctrl-header">
+              <span class="ctrl-label">下余白</span>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button class="step-btn" onclick="stepMargin('polBottom',-5)">−</button>
+                <input type="number" id="polBottomNum" class="margin-num" min="60" max="400" value="200" step="5" oninput="syncMarginFromNum('polBottom')">
+                <button class="step-btn" onclick="stepMargin('polBottom',5)">＋</button>
+                <span style="font-size:11px;color:var(--text-tertiary);">px</span>
+              </div>
+            </div>
+            <input type="range" min="60" max="400" value="200" id="polBottom" step="5" oninput="syncMarginFromSlider('polBottom')">
           </div>
-          <div class="ctrl-row">
-            <div class="ctrl-header"><span class="ctrl-label">側面 / 上余白</span><span class="ctrl-val" id="polSideVal">30px</span></div>
-            <input type="range" min="10" max="80" value="30" id="polSide" step="1">
+          <div class="margin-ctrl">
+            <div class="margin-ctrl-header">
+              <span class="ctrl-label">側面 / 上余白</span>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button class="step-btn" onclick="stepMargin('polSide',-1)">−</button>
+                <input type="number" id="polSideNum" class="margin-num" min="10" max="150" value="50" step="1" oninput="syncMarginFromNum('polSide')">
+                <button class="step-btn" onclick="stepMargin('polSide',1)">＋</button>
+                <span style="font-size:11px;color:var(--text-tertiary);">px</span>
+              </div>
+            </div>
+            <input type="range" min="10" max="150" value="50" id="polSide" step="1" oninput="syncMarginFromSlider('polSide')">
           </div>
         </div>
 
@@ -360,20 +383,23 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
         <div id="bannerOpts" class="opts">
           <div class="ctrl-label">バナーカラー</div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
-            <div class="color-chip bn-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
-            <div class="color-chip bn-c" data-color="#f5f0e8" style="background:#f5f0e8;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
-            <div class="color-chip bn-c" data-color="#1a1a1a" style="background:#1a1a1a;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
-            <div class="color-chip bn-c" data-color="#1b3a5c" style="background:#1b3a5c;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
-            <div class="color-chip bn-c" data-color="#2c2420" style="background:#2c2420;" onclick="selectChip(this,'bn-c');bannerCustomColor=null;scheduleRender()"></div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+            <div class="color-chip bn-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="pickChip('banner','#ffffff','ffffff',this)"></div>
+            <div class="color-chip bn-c" data-color="#000000" style="background:#000;" onclick="pickChip('banner','#000000','000000',this)"></div>
+            <div class="color-picker-btn" title="カラーピッカー"><input type="color" id="bannerColorPicker" value="#ffffff" oninput="onColorPicker('banner',this.value)"><i class="ti ti-color-picker" style="font-size:12px;color:var(--text-tertiary);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;" aria-hidden="true"></i></div>
             <span style="font-size:11px;color:var(--text-tertiary);">#</span>
-            <input type="text" id="bannerColorInput" class="ei" placeholder="ffffff" value="ffffff" maxlength="7" style="max-width:100px;">
-            <button class="apply-btn" onclick="applyBannerColor()">適用</button>
+            <input type="text" id="bannerColorInput" class="ei" placeholder="ffffff" value="ffffff" maxlength="7" style="max-width:90px;" oninput="onColorHexInput('banner',this.value)">
           </div>
-          <div class="ctrl-row">
-            <div class="ctrl-header"><span class="ctrl-label">バナーの高さ</span><span class="ctrl-val" id="bannerHeightVal">120px</span></div>
-            <input type="range" min="60" max="240" value="120" id="bannerHeight" step="4">
+          <div class="margin-ctrl">
+            <div class="margin-ctrl-header">
+              <span class="ctrl-label">バナーの高さ</span>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button class="step-btn" onclick="stepMargin('bannerHeight',-4)">−</button>
+                <input type="number" id="bannerHeightNum" class="margin-num" min="60" max="400" value="190" step="4" oninput="syncMarginFromNum('bannerHeight')">
+                <button class="step-btn" onclick="stepMargin('bannerHeight',4)">＋</button>
+                <span style="font-size:11px;color:var(--text-tertiary);">px</span>
+              </div>
+            </div>
+            <input type="range" min="60" max="400" value="190" id="bannerHeight" step="4" oninput="syncMarginFromSlider('bannerHeight')">
           </div>
         </div>
       </div>
@@ -441,10 +467,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
           </div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <div class="toggle-row"><span class="ctrl-label">場所</span><label class="toggle"><input type="checkbox" id="showLocation" onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
-          <input class="ei" id="eLocation" placeholder="Tokyo, Japan" oninput="scheduleRender()">
-        </div>
+
         <div style="display:flex;flex-direction:column;gap:5px;">
           <div class="toggle-row"><span class="ctrl-label">撮影日時</span><label class="toggle"><input type="checkbox" id="showDate" onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
           <input type="datetime-local" id="eDate" oninput="scheduleRender()">
@@ -478,7 +501,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
             <option value="Shippori Mincho">Shippori Mincho</option>
             <option value="Josefin Sans">Josefin Sans</option>
             <option value="Raleway">Raleway</option>
-            <option value="Oswald">Oswald</option>
+            <option value="Oswald" selected>Oswald</option>
             <option value="Bebas Neue">Bebas Neue</option>
           </select>
           <div class="font-preview" id="fontPreview">The quick brown fox — 素早い茶色の狐</div>
@@ -505,30 +528,28 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
             <span class="ctrl-label">フォントサイズ</span>
             <div style="display:flex;align-items:center;gap:4px;">
               <button class="step-btn" onclick="stepFontSize(-1)">−</button>
-              <input type="number" id="fontSizePx" class="fsn" min="8" max="120" value="14" step="1" oninput="clampFontSize();scheduleRender()">
+              <input type="number" id="fontSizePx" class="fsn" min="8" max="120" value="24" step="1" oninput="clampFontSize();scheduleRender()">
               <button class="step-btn" onclick="stepFontSize(1)">＋</button>
               <span style="font-size:11px;color:var(--text-tertiary);">px</span>
             </div>
           </div>
-          <input type="range" min="8" max="120" value="14" id="fontSizeSlider" step="1" oninput="syncFontSizeFromSlider()">
+          <input type="range" min="8" max="120" value="24" id="fontSizeSlider" step="1" oninput="syncFontSizeFromSlider()">
         </div>
         <div class="ctrl-label">文字カラー</div>
         <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
-          <div class="color-chip tc selected" data-color="#1a1a1a" style="background:#1a1a1a;" onclick="selectChip(this,'tc');textColor='#1a1a1a';g('txtColorInput').value='1a1a1a';scheduleRender()"></div>
-          <div class="color-chip tc" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="selectChip(this,'tc');textColor='#ffffff';g('txtColorInput').value='ffffff';scheduleRender()"></div>
-          <div class="color-chip tc" data-color="#888888" style="background:#888;" onclick="selectChip(this,'tc');textColor='#888888';g('txtColorInput').value='888888';scheduleRender()"></div>
-          <div class="color-chip tc" data-color="#f5d08a" style="background:#f5d08a;" onclick="selectChip(this,'tc');textColor='#f5d08a';g('txtColorInput').value='f5d08a';scheduleRender()"></div>
+          <div class="color-chip tc selected" data-color="#000000" style="background:#000;" onclick="pickChip('txt','#000000','000000',this)"></div>
+          <div class="color-chip tc" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="pickChip('txt','#ffffff','ffffff',this)"></div>
+          <div class="color-picker-btn" title="カラーピッカー"><input type="color" id="txtColorPicker" value="#000000" oninput="onColorPicker('txt',this.value)"><i class="ti ti-color-picker" style="font-size:12px;color:var(--text-tertiary);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;" aria-hidden="true"></i></div>
           <span style="font-size:11px;color:var(--text-tertiary);">#</span>
-          <input type="text" id="txtColorInput" class="ei" placeholder="1a1a1a" value="1a1a1a" maxlength="7" style="max-width:90px;">
-          <button class="apply-btn" onclick="applyTxtColorCode()">適用</button>
+          <input type="text" id="txtColorInput" class="ei" placeholder="000000" value="000000" maxlength="7" style="max-width:90px;" oninput="onColorHexInput('txt',this.value)">
         </div>
         <div class="ctrl-row" style="margin-top:4px;">
           <div class="ctrl-header"><span class="ctrl-label">文字の太さ</span></div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px;">
             <button class="seg-btn" data-weight="300" style="flex:1;" onclick="setFontWeight('300',this)">Light</button>
-            <button class="seg-btn active" data-weight="400" style="flex:1;" onclick="setFontWeight('400',this)">Regular</button>
+            <button class="seg-btn" data-weight="400" style="flex:1;" onclick="setFontWeight('400',this)">Regular</button>
             <button class="seg-btn" data-weight="500" style="flex:1;" onclick="setFontWeight('500',this)">Medium</button>
-            <button class="seg-btn" data-weight="700" style="flex:1;" onclick="setFontWeight('700',this)">Bold</button>
+            <button class="seg-btn active" data-weight="700" style="flex:1;" onclick="setFontWeight('700',this)">Bold</button>
           </div>
         </div>
       </div>
@@ -567,8 +588,24 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 <script>
 const g = id => document.getElementById(id);
-let currentImage=null, currentStyle='polaroid', currentFont='DM Mono', fontWeight='400', textColor='#1a1a1a';
+let currentImage=null, currentStyle='polaroid', currentFont='Oswald', fontWeight='700', textColor='#000000';
 let renderTimer=null, loadedFonts=new Set(['DM Mono','Playfair Display']);
+
+// Oswaldを起動時にFontFace APIで先行ロード（Promiseとして保持）
+const oswaldReady=(async function preloadOswald(){
+  const name='Oswald';
+  const url='https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;700&display=swap';
+  try{
+    const css=await fetch(url).then(r=>r.text());
+    const style=document.createElement('style');
+    style.textContent=css;
+    document.head.appendChild(style);
+    await Promise.all([300,400,500,700].map(w=>document.fonts.load(`${w} 16px 'Oswald'`)));
+    loadedFonts.add(name);
+  }catch(e){
+    console.warn('Oswald preload failed:',e);
+  }
+})();
 let bannerCustomColor=null, polCustomColor=null;
 
 // ---- フォーマット ----
@@ -590,7 +627,7 @@ function getPolaroidLines(){
   const topParts=[];
   if(g('showCamera').checked&&cam) topParts.push(cam);
   if(lens) topParts.push(lens);
-  const topLine=topParts.join('  /  ');
+  const topLine=topParts.join('  |  ');
 
   const bottomParts=[focal,ap,ss,iso].filter(Boolean);
   if(g('showSettings').checked===false) bottomParts.splice(0);
@@ -600,7 +637,6 @@ function getPolaroidLines(){
   const bottomLine=settingsParts.join('  ');
 
   const extra=[];
-  if(g('showLocation').checked&&g('eLocation').value) extra.push(g('eLocation').value);
   if(g('showDate').checked&&fmtDateTime()) extra.push(fmtDateTime());
   if(g('showCustom').checked&&g('eCustom').value) extra.push(g('eCustom').value);
 
@@ -613,7 +649,6 @@ function getOverlayLines(){
   if(g('showCamera').checked){const t=fmtCamera();if(t)lines.push({text:t,primary:true});}
   if(g('showSettings').checked){const t=getSettingsText();if(t)lines.push({text:t,primary:false});}
   if(g('showLens').checked&&g('eLens').value) lines.push({text:g('eLens').value,primary:false});
-  if(g('showLocation').checked&&g('eLocation').value) lines.push({text:g('eLocation').value,primary:false});
   if(g('showDate').checked&&fmtDateTime()) lines.push({text:fmtDateTime(),primary:false});
   if(g('showCustom').checked&&g('eCustom').value) lines.push({text:g('eCustom').value,primary:false});
   return lines;
@@ -636,14 +671,86 @@ function onBgChange(){ g('overlayBandOpts').style.display=getSegVal('overlayBgSe
 
 g('bandOpacity').addEventListener('input',e=>{g('bandOpacityVal').textContent=e.target.value+'%';scheduleRender();});
 g('overlayHeight').addEventListener('input',e=>{g('overlayHeightVal').textContent=e.target.value+'%';scheduleRender();});
-g('polBottom').addEventListener('input',e=>{g('polBottomVal').textContent=e.target.value+'px';scheduleRender();});
-g('polSide').addEventListener('input',e=>{g('polSideVal').textContent=e.target.value+'px';scheduleRender();});
-g('bannerHeight').addEventListener('input',e=>{g('bannerHeightVal').textContent=e.target.value+'px';scheduleRender();});
+// polBottom/polSide はsyncMarginFromSliderで処理
 
 function applyPolColor(){
   let v=g('polColorInput').value.replace('#','').trim();
   if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split('').map(c=>c+c).join('');
-  if(/^[0-9a-fA-F]{6}$/.test(v)){polCustomColor='#'+v;document.querySelectorAll('.color-chip.pl-c').forEach(c=>c.classList.remove('selected'));scheduleRender();}
+  if(/^[0-9a-fA-F]{6}$/.test(v)){polCustomColor='#'+v;document.querySelectorAll('.color-chip.pl-c').forEach(c=>c.classList.remove('selected'));g('polColorPicker').value='#'+v;scheduleRender();}
+}
+
+// チップ選択（カスタムカラーをリセットしてチップの色を確実に反映）
+function pickChip(target, hex, hexShort, el){
+  if(target==='pol'){
+    polCustomColor=null;
+    selectChip(el,'pl-c');
+    g('polColorInput').value=hexShort;
+    if(g('polColorPicker')) g('polColorPicker').value=hex;
+  } else if(target==='banner'){
+    bannerCustomColor=null;
+    selectChip(el,'bn-c');
+    g('bannerColorInput').value=hexShort;
+    if(g('bannerColorPicker')) g('bannerColorPicker').value=hex;
+  } else if(target==='txt'){
+    textColor=hex;
+    selectChip(el,'tc');
+    g('txtColorInput').value=hexShort;
+    if(g('txtColorPicker')) g('txtColorPicker').value=hex;
+  }
+  scheduleRender();
+}
+
+// カラーピッカー変更
+function onColorPicker(target, hex){
+  const short=hex.replace('#','');
+  if(target==='pol'){
+    polCustomColor=hex;
+    g('polColorInput').value=short;
+    document.querySelectorAll('.color-chip.pl-c').forEach(c=>c.classList.remove('selected'));
+    scheduleRender();
+  } else if(target==='banner'){
+    bannerCustomColor=hex;
+    g('bannerColorInput').value=short;
+    document.querySelectorAll('.color-chip.bn-c').forEach(c=>c.classList.remove('selected'));
+    scheduleRender();
+  } else if(target==='txt'){
+    textColor=hex;
+    g('txtColorInput').value=short;
+    document.querySelectorAll('.color-chip.tc').forEach(c=>c.classList.remove('selected'));
+    scheduleRender();
+  }
+}
+
+// HEXテキスト入力
+function onColorHexInput(target, val){
+  let v=val.replace('#','').trim();
+  if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split('').map(c=>c+c).join('');
+  if(!/^[0-9a-fA-F]{6}$/.test(v)) return;
+  const hex='#'+v;
+  if(target==='pol'){polCustomColor=hex;g('polColorPicker').value=hex;document.querySelectorAll('.color-chip.pl-c').forEach(c=>c.classList.remove('selected'));scheduleRender();}
+  else if(target==='banner'){bannerCustomColor=hex;g('bannerColorPicker').value=hex;document.querySelectorAll('.color-chip.bn-c').forEach(c=>c.classList.remove('selected'));scheduleRender();}
+  else if(target==='txt'){textColor=hex;g('txtColorPicker').value=hex;document.querySelectorAll('.color-chip.tc').forEach(c=>c.classList.remove('selected'));scheduleRender();}
+}
+
+// 余白スライダー/数値の同期
+function syncMarginFromSlider(id){
+  const v=parseInt(g(id).value);
+  g(id+'Num').value=v;
+  scheduleRender();
+}
+function syncMarginFromNum(id){
+  const el=g(id+'Num');
+  let v=parseInt(el.value);
+  if(isNaN(v)) return;
+  const min=parseInt(g(id).min), max=parseInt(g(id).max);
+  v=Math.min(max,Math.max(min,v));
+  g(id).value=v;
+  scheduleRender();
+}
+function stepMargin(id, delta){
+  const el=g(id+'Num');
+  let v=Math.min(parseInt(g(id).max),Math.max(parseInt(g(id).min),(parseInt(el.value)||0)+delta));
+  el.value=v; g(id).value=v; scheduleRender();
 }
 function applyBannerColor(){
   let v=g('bannerColorInput').value.replace('#','').trim();
@@ -662,20 +769,33 @@ function switchFontSource(src,btn){
   g('systemFontPanel').style.display=src==='system'?'':'none';
   g('customFontPanel').style.display=src==='custom'?'':'none';
 }
-function applyGoogleFont(){
-  const n=g('googleFontSelect').value; currentFont=n;
-  g('fontPreview').style.fontFamily=n; scheduleRender();
+async function applyGoogleFont(){
+  const n=g('googleFontSelect').value;
+  currentFont=n;
+  g('fontPreview').style.fontFamily=n;
+  scheduleRender();
   if(!loadedFonts.has(n)){
-    const l=document.createElement('link');l.rel='stylesheet';
-    l.href=`https://fonts.googleapis.com/css2?family=${n.replace(/ /g,'+')}:wght@300;400;500;700&display=swap`;
-    l.onload=()=>{loadedFonts.add(n);scheduleRender();};
-    document.head.appendChild(l);
+    try{
+      const url=`https://fonts.googleapis.com/css2?family=${n.replace(/ /g,'+')}:wght@300;400;500;700&display=swap`;
+      const css=await fetch(url).then(r=>r.text());
+      const style=document.createElement('style');
+      style.textContent=css;
+      document.head.appendChild(style);
+      await Promise.all([300,400,500,700].map(w=>document.fonts.load(`${w} 16px '${n}'`)));
+      loadedFonts.add(n);
+    }catch(e){
+      const l=document.createElement('link');l.rel='stylesheet';
+      l.href=`https://fonts.googleapis.com/css2?family=${n.replace(/ /g,'+')}:wght@300;400;500;700&display=swap`;
+      document.head.appendChild(l);
+      await new Promise(r=>setTimeout(r,800));
+      loadedFonts.add(n);
+    }
   }
-  setTimeout(()=>scheduleRender(),500);
+  scheduleRender();
 }
 function applySystemFont(){ const n=g('systemFontSelect').value; currentFont=n; g('sysFontPreview').style.fontFamily=n; scheduleRender(); }
 function applyCustomFont(){ const n=g('customFontInput').value.trim(); if(n){currentFont=n;g('customFontPreview').style.fontFamily=n;scheduleRender();} }
-function stepFontSize(d){ const i=g('fontSizePx'),s=g('fontSizeSlider'); let v=Math.min(120,Math.max(8,(parseInt(i.value)||14)+d)); i.value=v;s.value=v;scheduleRender(); }
+function stepFontSize(d){ const i=g('fontSizePx'),s=g('fontSizeSlider'); let v=Math.min(120,Math.max(8,(parseInt(i.value)||24)+d)); i.value=v;s.value=v;scheduleRender(); }
 function clampFontSize(){ const i=g('fontSizePx'),s=g('fontSizeSlider'); let v=parseInt(i.value); if(isNaN(v))return; v=Math.min(120,Math.max(8,v)); s.value=v; }
 function syncFontSizeFromSlider(){ g('fontSizePx').value=g('fontSizeSlider').value; scheduleRender(); }
 
@@ -726,7 +846,8 @@ async function extractExif(file,img){
   } catch(e) {
     console.warn('exifr parse error:', e);
   }
-  renderFrame();
+  // Oswaldロード完了を待ってから描画
+  oswaldReady.then(()=>{ renderFrame(); });
   document.dispatchEvent(new Event('framerendered'));
   dropZone.style.display='none';
   g('previewWrap').style.display='flex';
@@ -736,9 +857,11 @@ async function extractExif(file,img){
   if(fabGrp && window.innerWidth <= 768) fabGrp.style.display = 'flex';
 }
 
+// ファイル枚数UI更新
+
 function scheduleRender(){ if(renderTimer)clearTimeout(renderTimer); renderTimer=setTimeout(renderFrame,80); }
 
-function getFontSize(){ return Math.max(8,parseInt(g('fontSizePx').value)||14); }
+function getFontSize(){ return Math.max(8,parseInt(g('fontSizePx').value)||24); }
 function getLineH(fs){ return fs*1.6; }
 
 // プレビュー用（表示サイズに縮小）
@@ -755,9 +878,7 @@ function renderFrame(){
   else if(currentStyle==='banner') renderBanner(img,iw,ih,fs,fontStr,previewCanvas,ctx);
 }
 
-// 保存用（フル解像度）
-// 方針: プレビューcanvasの内容を元解像度にスケールアップして描画する
-// これによりフレームの比率・レイアウトがプレビューと完全に一致する
+
 function renderFullRes(){
   if(!currentImage)return null;
   const img=currentImage;
@@ -803,8 +924,8 @@ function renderFullRes(){
     const {topLine,bottomLine,extra}=getPolaroidLines();
     const topFs=Math.round(fs*1.1), botFs=Math.round(fs*0.88), extraFs=Math.round(fs*0.82);
     const topFont=`700 ${topFs}px '${currentFont}',monospace`;
-    const botFont=`${fontWeight} ${botFs}px '${currentFont}',monospace`;
-    const extraFont=`${fontWeight} ${extraFs}px '${currentFont}',monospace`;
+    const botFont=`400 ${botFs}px '${currentFont}',monospace`;
+    const extraFont=`400 ${extraFs}px '${currentFont}',monospace`;
     const textLines=[];
     if(topLine) textLines.push({text:topLine,font:topFont,color:mainColor,lh:topFs*1.5});
     if(bottomLine) textLines.push({text:bottomLine,font:botFont,color:subColor,lh:botFs*1.5});
@@ -914,8 +1035,8 @@ function renderPolaroid(img,iw,ih,fs,canvas,c){
   const botFs=Math.round(fs*0.88);
   const extraFs=Math.round(fs*0.82);
   const topFont=`700 ${topFs}px '${currentFont}',monospace`;
-  const botFont=`${fontWeight} ${botFs}px '${currentFont}',monospace`;
-  const extraFont=`${fontWeight} ${extraFs}px '${currentFont}',monospace`;
+  const botFont=`400 ${botFs}px '${currentFont}',monospace`;
+  const extraFont=`400 ${extraFs}px '${currentFont}',monospace`;
 
   // テキスト行を構築
   const textLines=[];
@@ -995,7 +1116,7 @@ g('resetBtn').addEventListener('click',()=>{
   g('previewWrap').style.display='none';g('leftBottom').style.display='none';
   dropZone.style.display='flex';fileInput.value='';
   const fabGrp2 = document.getElementById('fabGroup'); if(fabGrp2) fabGrp2.style.display='none';
-  ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eLocation','eCustom'].forEach(id=>g(id).value='');
+  ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eCustom'].forEach(id=>g(id).value='');
   g('eDate').value='';
 });
 g('txtColorInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyTxtColorCode();});
@@ -1030,8 +1151,7 @@ function captureSettings(){
     showCamera: g('showCamera').checked,
     showSettings: g('showSettings').checked,
     showLens: g('showLens').checked,
-    showLocation: g('showLocation').checked,
-    showDate: g('showDate').checked,
+        showDate: g('showDate').checked,
     showCustom: g('showCustom').checked,
     // 文字
     font: currentFont,
@@ -1047,14 +1167,14 @@ function applySettings(s){
   if(styleBtn) setStyle(s.style, styleBtn);
   // フレーム
   if(s.polColor){ polCustomColor=s.polColor; document.querySelectorAll('.color-chip.pl-c').forEach(c=>c.classList.remove('selected')); g('polColorInput').value=s.polColor.replace('#',''); }
-  if(s.polBottom){ g('polBottom').value=s.polBottom; g('polBottomVal').textContent=s.polBottom+'px'; }
-  if(s.polSide){ g('polSide').value=s.polSide; g('polSideVal').textContent=s.polSide+'px'; }
+  if(s.polBottom){ g('polBottom').value=s.polBottom; if(g('polBottomNum'))g('polBottomNum').value=s.polBottom; }
+  if(s.polSide){ g('polSide').value=s.polSide; if(g('polSideNum'))g('polSideNum').value=s.polSide; }
   if(s.bannerColor){ bannerCustomColor=s.bannerColor; document.querySelectorAll('.color-chip.bn-c').forEach(c=>c.classList.remove('selected')); g('bannerColorInput').value=s.bannerColor.replace('#',''); }
-  if(s.bannerHeight){ g('bannerHeight').value=s.bannerHeight; g('bannerHeightVal').textContent=s.bannerHeight+'px'; }
+  if(s.bannerHeight){ g('bannerHeight').value=s.bannerHeight; if(g('bannerHeightNum'))g('bannerHeightNum').value=s.bannerHeight; }
   if(s.overlayHeight){ g('overlayHeight').value=s.overlayHeight; g('overlayHeightVal').textContent=s.overlayHeight+'%'; }
   if(s.bandOpacity){ g('bandOpacity').value=s.bandOpacity; g('bandOpacityVal').textContent=s.bandOpacity+'%'; }
   // Exifトグル
-  ['showCamera','showSettings','showLens','showLocation','showDate','showCustom'].forEach(id=>{ if(s[id]!==undefined) g(id).checked=s[id]; });
+  ['showCamera','showSettings','showLens','showDate','showCustom'].forEach(id=>{ if(s[id]!==undefined) g(id).checked=s[id]; });
   // 文字
   if(s.font){ currentFont=s.font; }
   if(s.fontWeight){ fontWeight=s.fontWeight; document.querySelectorAll('[data-weight]').forEach(b=>b.classList.remove('active')); const wb=document.querySelector(`[data-weight="${s.fontWeight}"]`); if(wb)wb.classList.add('active'); }
@@ -1103,6 +1223,11 @@ function syncHeaderHeight(){
 }
 syncHeaderHeight();
 window.addEventListener('resize', syncHeaderHeight);
+
+// Oswaldロード完了後に初期描画
+oswaldReady.then(()=>{
+  if(currentImage) scheduleRender();
+});
 
 // フローティングボタン群（モバイル用）
 const fabGroup = document.getElementById('fabGroup');
