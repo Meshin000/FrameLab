@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Frame Lab — EXIF-Aware Photo Framer</title>
+<title>Frame Lab — EXIF-Aware Photo Framer v1.5.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
@@ -584,12 +584,14 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
   </button>
 </div>
 
-<input type="file" id="fileInput" accept="image/*">
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<input type="file" id="fileInput" accept="image/*" multiple>
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 <script>
 const g = id => document.getElementById(id);
 let currentImage=null, currentStyle='polaroid', currentFont='Oswald', fontWeight='700', textColor='#000000';
 let renderTimer=null, loadedFonts=new Set(['DM Mono','Playfair Display']);
+let fileQueue=[];
 
 // Oswaldを起動時にFontFace APIで先行ロード（Promiseとして保持）
 const oswaldReady=(async function preloadOswald(){
@@ -802,8 +804,18 @@ function syncFontSizeFromSlider(){ g('fontSizePx').value=g('fontSizeSlider').val
 const dropZone=g('dropZone'),fileInput=g('fileInput'),previewCanvas=g('preview'),ctx=previewCanvas.getContext('2d');
 dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
 dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
-dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f&&f.type.startsWith('image/'))loadFile(f);});
-fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+dropZone.addEventListener('drop',e=>{
+  e.preventDefault();dropZone.classList.remove('dragover');
+  const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
+  if(files.length){fileQueue=files;loadFile(files[0]);updateFileCountUI();}
+});
+fileInput.addEventListener('change',e=>{
+  const files=Array.from(e.target.files);
+  if(!files.length)return;
+  fileQueue=files;
+  loadFile(files[0]);
+  updateFileCountUI();
+});
 
 function loadFile(file){
   const r=new FileReader();
@@ -1116,7 +1128,8 @@ function isLightColor(hex){try{const r=parseInt(hex.slice(1,3),16),gv=parseInt(h
 
 
 // 保存処理（iOS Chrome対応）
-function saveImage(){
+async function saveImage(){
+  if(fileQueue.length>1){await downloadAllAsZip();return;}
   const exportCanvas=renderFullRes();
   if(!exportCanvas) return;
   const dataUrl=exportCanvas.toDataURL('image/jpeg',1.0);
@@ -1139,14 +1152,112 @@ function saveImage(){
     l.click();
   }
 }
+
+// FileReader をPromise化
+function readFileAsDataURL(file){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(file);});
+}
+// Image読み込みをPromise化
+function loadImage(dataUrl){
+  return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=dataUrl;});
+}
+// 保存ボタンのラベルを枚数に応じて更新
+function updateFileCountUI(){
+  const btn=g('downloadBtn');
+  if(!btn)return;
+  if(fileQueue.length>1){
+    btn.innerHTML=`<i class="ti ti-download" style="font-size:13px;"></i> ${fileQueue.length}枚をZIPで保存`;
+  }else{
+    btn.innerHTML='<i class="ti ti-download" style="font-size:13px;"></i> 保存';
+  }
+}
+
+// 1ファイルを処理してBlobを返す（フル解像度＆フレームパラメータはスケール調整）
+async function processOneFile(file){
+  const ids=['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eDate','eCustom'];
+  const saved={};
+  ids.forEach(id=>{const el=g(id);if(el)saved[id]=el.value;});
+  const frameSaved={polSide:g('polSide').value,polBottom:g('polBottom').value,bannerHeight:g('bannerHeight').value};
+  try{
+    // EXIFを一時的にinputに反映
+    const exif=await exifr.parse(file,{tiff:true,exif:true,iptc:false,xmp:false,icc:false,translateKeys:true,translateValues:false,reviveValues:true})||{};
+    if(exif.Make)g('eMake').value=exif.Make.trim();
+    if(exif.Model)g('eModel').value=exif.Model.trim();
+    if(exif.FNumber!=null)g('eAperture').value=parseFloat(parseFloat(exif.FNumber).toFixed(1));
+    if(exif.ExposureTime!=null){const et=exif.ExposureTime;if(et>=1){g('eSSNum').value=Math.round(et);g('eShutterDenom').value=1;}else{g('eSSNum').value=1;g('eShutterDenom').value=Math.round(1/et);}}
+    if(exif.ISO!=null)g('eIso').value=exif.ISO;
+    else if(exif.ISOSpeedRatings!=null)g('eIso').value=Array.isArray(exif.ISOSpeedRatings)?exif.ISOSpeedRatings[0]:exif.ISOSpeedRatings;
+    const lensName=exif.LensModel||exif.Lens||exif.LensInfo||'';
+    if(lensName)g('eLens').value=lensName.trim();
+    if(exif.FocalLength!=null)g('eFocal').value=Math.round(exif.FocalLength);
+    const dt=exif.DateTimeOriginal||exif.DateTime||exif.CreateDate;
+    if(dt instanceof Date){const pad=n=>String(n).padStart(2,'0');g('eDate').value=`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;}
+    // 画像読み込み
+    const dataUrl=await readFileAsDataURL(file);
+    const img=await loadImage(dataUrl);
+    // スケール係数を計算（プレビュー時のスケーリング比）
+    const maxDim=1600;
+    let previewIw=img.naturalWidth,previewIh=img.naturalHeight;
+    if(previewIw>maxDim||previewIh>maxDim){const s=maxDim/Math.max(previewIw,previewIh);previewIw=Math.round(previewIw*s);previewIh=Math.round(previewIh*s);}
+    const scale=img.naturalWidth/previewIw;
+    // フレームパラメータをスケール調整
+    g('polSide').value=Math.round(parseInt(frameSaved.polSide)*scale);
+    g('polBottom').value=Math.round(parseInt(frameSaved.polBottom)*scale);
+    g('bannerHeight').value=Math.round(parseInt(frameSaved.bannerHeight)*scale);
+    // フォントサイズもスケール調整
+    const fs=Math.round(getFontSize()*scale);
+    const fontStr=`${fontWeight} ${fs}px '${currentFont}',monospace`;
+    // フル解像度で描画
+    const iw=img.naturalWidth,ih=img.naturalHeight;
+    const offCanvas=document.createElement('canvas');
+    const offCtx=offCanvas.getContext('2d');
+    if(currentStyle==='overlay')renderOverlay(img,iw,ih,fs,fontStr,offCanvas,offCtx);
+    else if(currentStyle==='polaroid')renderPolaroid(img,iw,ih,fs,offCanvas,offCtx);
+    else renderBanner(img,iw,ih,fs,fontStr,offCanvas,offCtx);
+    return await new Promise(res=>offCanvas.toBlob(b=>res(b),'image/jpeg',1.0));
+  }finally{
+    ids.forEach(id=>{const el=g(id);if(el)el.value=saved[id]||'';});
+    g('polSide').value=frameSaved.polSide;
+    g('polBottom').value=frameSaved.polBottom;
+    g('bannerHeight').value=frameSaved.bannerHeight;
+  }
+}
+
+// 全ファイルをZIPにまとめてダウンロード
+async function downloadAllAsZip(){
+  const btn=g('downloadBtn');
+  const fabSave=g('fabSave');
+  btn.textContent='処理中...';btn.disabled=true;
+  if(fabSave)fabSave.disabled=true;
+  try{
+    const zip=new JSZip();
+    for(const file of fileQueue){
+      const blob=await processOneFile(file);
+      const name=file.name.replace(/\.[^.]+$/,'')+'_framed.jpg';
+      zip.file(name,blob);
+    }
+    const zipBlob=await zip.generateAsync({type:'blob'});
+    const url=URL.createObjectURL(zipBlob);
+    const a=document.createElement('a');a.href=url;
+    a.download='framelab_'+Date.now()+'.zip';a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    console.error('ZIP error:',e);alert('処理中にエラーが発生しました。');
+  }finally{
+    updateFileCountUI();btn.disabled=false;
+    if(fabSave)fabSave.disabled=false;
+  }
+}
+
 g('downloadBtn').addEventListener('click', saveImage);
 g('resetBtn').addEventListener('click',()=>{
-  currentImage=null;previewCanvas.width=0;
+  currentImage=null;previewCanvas.width=0;fileQueue=[];
   g('previewWrap').style.display='none';g('leftBottom').style.display='none';
   dropZone.style.display='flex';fileInput.value='';
   const fabGrp2 = document.getElementById('fabGroup'); if(fabGrp2) fabGrp2.style.display='none';
   ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eCustom'].forEach(id=>g(id).value='');
   g('eDate').value='';
+  updateFileCountUI();
 });
 g('txtColorInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyTxtColorCode();});
 g('fontSizePx').addEventListener('keydown',e=>{if(e.key==='Enter'){clampFontSize();scheduleRender();}});
