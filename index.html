@@ -64,6 +64,15 @@ canvas#preview{max-width:100%;max-height:100%;display:block;border-radius:2px;tr
 .right-panel::-webkit-scrollbar{width:3px;}
 .right-panel::-webkit-scrollbar-thumb{background:var(--border-secondary);border-radius:2px;}
 
+/* モードタブ */
+.mode-tabs{display:flex;gap:4px;padding-bottom:.75rem;border-bottom:.5px solid var(--border-tertiary);}
+.mode-tab{flex:1;padding:5px 0;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;background:var(--bg-secondary);color:var(--text-secondary);border:.5px solid var(--border-tertiary);border-radius:var(--radius-md);cursor:pointer;transition:background .12s,color .12s;}
+.mode-tab:hover{border-color:var(--border-secondary);}
+.mode-tab.active{background:var(--text-primary);color:var(--bg-primary);border-color:var(--text-primary);}
+
+/* かんたんモードでは詳細専用要素を非表示 */
+.right-panel.simple .detail-only{display:none !important;}
+
 .section-block{display:flex;flex-direction:column;gap:8px;padding-bottom:1rem;border-bottom:.5px solid var(--border-tertiary);}
 .section-block:last-child{border-bottom:none;padding-bottom:0;}
 .section-label{font-size:11px;letter-spacing:.08em;color:var(--text-tertiary);text-transform:uppercase;margin-bottom:2px;}
@@ -246,7 +255,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 <div class="app">
   <div class="app-header">
     <div class="app-title">Frame Lab</div>
-    <div class="app-sub">v1.5.0 · EXIF-AWARE PHOTO FRAMER</div>
+    <div class="app-sub">v1.6.0 · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
@@ -269,6 +278,12 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
     </div>
 
     <div class="right-panel">
+
+      <!-- モードタブ -->
+      <div class="mode-tabs">
+        <button class="mode-tab active" onclick="switchMode('simple', this)">かんたん</button>
+        <button class="mode-tab" onclick="switchMode('detail', this)">詳細</button>
+      </div>
 
       <!-- フレームスタイル -->
       <div class="section-block">
@@ -313,7 +328,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
         </div>
 
         <!-- Overlay -->
-        <div id="overlayOpts" class="opts">
+        <div id="overlayOpts" class="opts detail-only">
           <div class="ctrl-label">オーバーレイ背景</div>
           <div class="seg" id="overlayBgSeg">
             <button class="seg-btn active" data-bg="gradient" onclick="setSegBtn(this,'overlayBgSeg');scheduleRender()">グラデーション</button>
@@ -345,7 +360,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
         </div>
 
         <!-- Polaroid: デフォルト visible -->
-        <div id="polaroidOpts" class="opts visible">
+        <div id="polaroidOpts" class="opts visible detail-only">
           <div class="ctrl-label">フレームカラー</div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
             <div class="color-chip pl-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="pickChip('pol','#ffffff','ffffff',this)"></div>
@@ -381,7 +396,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
         </div>
 
         <!-- Banner -->
-        <div id="bannerOpts" class="opts">
+        <div id="bannerOpts" class="opts detail-only">
           <div class="ctrl-label">バナーカラー</div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:2px;">
             <div class="color-chip bn-c selected" data-color="#ffffff" style="background:#fff;border-color:#ccc;" onclick="pickChip('banner','#ffffff','ffffff',this)"></div>
@@ -411,7 +426,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 
         <div style="display:flex;flex-direction:column;gap:5px;">
           <div class="toggle-row"><span class="ctrl-label">カメラモデル</span><label class="toggle"><input type="checkbox" id="showCamera" checked onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
-          <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:6px;">
+          <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:6px;" class="detail-only">
             <div class="num-field">
               <span class="num-field-label">メーカー</span>
               <input class="ei" id="eMake" placeholder="Canon" oninput="scheduleRender()">
@@ -425,7 +440,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 
         <div style="display:flex;flex-direction:column;gap:5px;">
           <div class="toggle-row"><span class="ctrl-label">レンズ情報</span><label class="toggle"><input type="checkbox" id="showLens" checked onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
-          <input class="ei" id="eLens" placeholder="EF 50mm F1.8" oninput="scheduleRender()">
+          <input class="ei detail-only" id="eLens" placeholder="EF 50mm F1.8" oninput="scheduleRender()">
         </div>
 
         <div style="display:flex;flex-direction:column;gap:6px;">
@@ -433,7 +448,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
             <span class="ctrl-label">撮影設定 (F値 / SS / ISO)</span>
             <label class="toggle"><input type="checkbox" id="showSettings" checked onchange="scheduleRender()"><span class="slider-toggle"></span></label>
           </div>
-          <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="display:flex;flex-direction:column;gap:5px;" class="detail-only">
             <div style="display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:5px;">
               <div class="num-field">
                 <span class="num-field-label">F値</span>
@@ -471,16 +486,12 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 
         <div style="display:flex;flex-direction:column;gap:5px;">
           <div class="toggle-row"><span class="ctrl-label">撮影日時</span><label class="toggle"><input type="checkbox" id="showDate" onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
-          <input type="datetime-local" id="eDate" oninput="scheduleRender()">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <div class="toggle-row"><span class="ctrl-label">カスタムテキスト</span><label class="toggle"><input type="checkbox" id="showCustom" onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
-          <input class="ei" id="eCustom" placeholder="任意のテキスト" oninput="scheduleRender()">
+          <input type="datetime-local" id="eDate" oninput="scheduleRender()" class="detail-only">
         </div>
       </div>
 
       <!-- 文字スタイル -->
-      <div class="section-block">
+      <div class="section-block detail-only">
         <div class="section-label">文字スタイル</div>
         <div class="font-source-tabs">
           <button class="font-tab active" onclick="switchFontSource('google',this)">Google Fonts</button>
@@ -556,7 +567,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
       </div>
 
       <!-- プリセット -->
-      <div class="section-block">
+      <div class="section-block detail-only">
         <div class="section-label">プリセット</div>
         <div style="display:flex;gap:6px;">
           <input class="ei" id="presetName" placeholder="名前を入力して保存" style="flex:1;">
@@ -641,7 +652,6 @@ function getPolaroidLines(){
 
   const extra=[];
   if(g('showDate').checked&&fmtDateTime()) extra.push(fmtDateTime());
-  if(g('showCustom').checked&&g('eCustom').value) extra.push(g('eCustom').value);
 
   return {topLine, bottomLine, extra};
 }
@@ -653,7 +663,6 @@ function getOverlayLines(){
   if(g('showSettings').checked){const t=getSettingsText();if(t)lines.push({text:t,primary:false});}
   if(g('showLens').checked&&g('eLens').value) lines.push({text:g('eLens').value,primary:false});
   if(g('showDate').checked&&fmtDateTime()) lines.push({text:fmtDateTime(),primary:false});
-  if(g('showCustom').checked&&g('eCustom').value) lines.push({text:g('eCustom').value,primary:false});
   return lines;
 }
 
@@ -1175,7 +1184,7 @@ function updateFileCountUI(){
 
 // 1ファイルを処理してBlobを返す（フル解像度＆フレームパラメータはスケール調整）
 async function processOneFile(file){
-  const ids=['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eDate','eCustom'];
+  const ids=['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eDate'];
   const saved={};
   ids.forEach(id=>{const el=g(id);if(el)saved[id]=el.value;});
   const frameSaved={polSide:g('polSide').value,polBottom:g('polBottom').value,bannerHeight:g('bannerHeight').value};
@@ -1256,7 +1265,7 @@ g('resetBtn').addEventListener('click',()=>{
   g('previewWrap').style.display='none';g('leftBottom').style.display='none';
   dropZone.style.display='flex';fileInput.value='';
   const fabGrp2 = document.getElementById('fabGroup'); if(fabGrp2) fabGrp2.style.display='none';
-  ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eCustom'].forEach(id=>g(id).value='');
+  ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal'].forEach(id=>g(id).value='');
   g('eDate').value='';
   updateFileCountUI();
 });
@@ -1292,8 +1301,7 @@ function captureSettings(){
     showCamera: g('showCamera').checked,
     showSettings: g('showSettings').checked,
     showLens: g('showLens').checked,
-        showDate: g('showDate').checked,
-    showCustom: g('showCustom').checked,
+    showDate: g('showDate').checked,
     // 文字
     font: currentFont,
     fontWeight: fontWeight,
@@ -1315,7 +1323,7 @@ function applySettings(s){
   if(s.overlayHeight){ g('overlayHeight').value=s.overlayHeight; g('overlayHeightVal').textContent=s.overlayHeight+'%'; }
   if(s.bandOpacity){ g('bandOpacity').value=s.bandOpacity; g('bandOpacityVal').textContent=s.bandOpacity+'%'; }
   // Exifトグル
-  ['showCamera','showSettings','showLens','showDate','showCustom'].forEach(id=>{ if(s[id]!==undefined) g(id).checked=s[id]; });
+  ['showCamera','showSettings','showLens','showDate'].forEach(id=>{ if(s[id]!==undefined) g(id).checked=s[id]; });
   // 文字
   if(s.font){ currentFont=s.font; }
   if(s.fontWeight){ fontWeight=s.fontWeight; document.querySelectorAll('[data-weight]').forEach(b=>b.classList.remove('active')); const wb=document.querySelector(`[data-weight="${s.fontWeight}"]`); if(wb)wb.classList.add('active'); }
@@ -1356,6 +1364,34 @@ function renderPresetList(){
 
 // 初期化
 renderPresetList();
+
+// ---- モード切り替え ----
+function switchMode(mode, btn){
+  const panel=document.querySelector('.right-panel');
+  document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  if(mode==='simple'){
+    panel.classList.add('simple');
+  }else{
+    panel.classList.remove('simple');
+  }
+  localStorage.setItem('framelab_mode', mode);
+}
+
+// 初期化時に保存されたモードを復元
+(function initMode(){
+  const savedMode=localStorage.getItem('framelab_mode')||'simple';
+  const panel=document.querySelector('.right-panel');
+  const modeBtn=document.querySelector(`.mode-tab[onclick*="'${savedMode}'"]`);
+  if(savedMode==='simple'){
+    panel.classList.add('simple');
+    if(modeBtn) modeBtn.classList.add('active');
+    else document.querySelector('.mode-tab:first-of-type').classList.add('active');
+  }else{
+    panel.classList.remove('simple');
+    if(modeBtn) modeBtn.classList.add('active');
+  }
+})();
 
 // ヘッダー高さをCSS変数にセット（stickyのtopを正確に合わせる）
 function syncHeaderHeight(){
