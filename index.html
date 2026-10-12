@@ -255,7 +255,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 <div class="app">
   <div class="app-header">
     <div class="app-title">Frame Lab</div>
-    <div class="app-sub">v1.6.0 · EXIF-AWARE PHOTO FRAMER</div>
+    <div class="app-sub">v1.6.1b · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
@@ -423,6 +423,12 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
       <!-- Exif情報 -->
       <div class="section-block">
         <div class="section-label">Exif情報</div>
+
+        <!-- PNG用警告メッセージ -->
+        <div id="pngMessage" style="display:none;padding:8px 10px;margin-bottom:10px;background:var(--bg-tertiary);border:.5px solid var(--text-danger);border-radius:var(--radius-md);font-size:11px;color:var(--text-danger);line-height:1.5;">
+          <i class="ti ti-alert-circle" style="font-size:13px;margin-right:4px;vertical-align:middle;"></i>
+          画像からEXIF情報を取得できなかったため、<br>カメラ情報を手動で入力してください。
+        </div>
 
         <div style="display:flex;flex-direction:column;gap:5px;">
           <div class="toggle-row"><span class="ctrl-label">カメラモデル</span><label class="toggle"><input type="checkbox" id="showCamera" checked onchange="scheduleRender()"><span class="slider-toggle"></span></label></div>
@@ -604,6 +610,23 @@ const g = id => document.getElementById(id);
 let currentImage=null, currentStyle='polaroid', currentFont='Oswald', fontWeight='700', textColor='#000000';
 let renderTimer=null, loadedFonts=new Set(['DM Mono','Playfair Display']);
 let fileQueue=[];
+
+// PNG 判定
+function isPNG(file){
+  return file.type==='image/png' || file.name.toLowerCase().endsWith('.png');
+}
+
+// PNG メッセージ表示
+function showPngMessage(){
+  const msg=g('pngMessage');
+  if(msg) msg.style.display='block';
+}
+
+// PNG メッセージ非表示
+function hidePngMessage(){
+  const msg=g('pngMessage');
+  if(msg) msg.style.display='none';
+}
 
 // Oswaldを起動時にFontFace APIで先行ロード（Promiseとして保持）
 const oswaldReady=(async function preloadOswald(){
@@ -833,20 +856,37 @@ function loadFile(file){
   r.readAsDataURL(file);
 }
 
+// EXIF値を数値化（XMP由来の "56/10" や "1/400" のような分数文字列にも対応）
+function toNum(v){
+  if(typeof v==='number') return v;
+  if(typeof v!=='string') return NaN;
+  const m=v.match(/^\s*(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*$/);
+  if(m){ const d=parseFloat(m[2]); return d?parseFloat(m[1])/d:NaN; }
+  return parseFloat(v);
+}
+
+// カメラ系のEXIFが1つでも取れたか（PNGのヘッダ情報だけでは false）
+const CAMERA_EXIF_KEYS=['Make','Model','FNumber','ExposureTime','ISO','ISOSpeedRatings','LensModel','Lens','LensInfo','FocalLength','DateTimeOriginal','DateTime','CreateDate'];
+function hasCameraExif(a){ return CAMERA_EXIF_KEYS.some(k=>a[k]!=null && a[k]!==''); }
+
 async function extractExif(file,img){
+  hidePngMessage();
+  // JPEG / PNG 共通で exifr により読み込み（exifr は PNG の eXIf チャンクも読める）
   try {
+    // PNG は Lightroom 等が EXIF を XMP(iTXt) に入れるため xmp を有効化（JPEG は従来どおり）
     const a = await exifr.parse(file, {
-      tiff: true, exif: true, iptc: false, xmp: false, icc: false,
+      tiff: true, exif: true, iptc: false, xmp: isPNG(file), icc: false,
       translateKeys: true, translateValues: false, reviveValues: true,
     }) || {};
 
     if(a.Make) g('eMake').value = a.Make.trim();
     if(a.Model) g('eModel').value = a.Model.trim();
 
-    if(a.FNumber != null) g('eAperture').value = parseFloat(parseFloat(a.FNumber).toFixed(1));
+    const fn = toNum(a.FNumber);
+    if(!isNaN(fn)) g('eAperture').value = parseFloat(fn.toFixed(1));
 
-    if(a.ExposureTime != null){
-      const et = a.ExposureTime;
+    const et = toNum(a.ExposureTime);
+    if(!isNaN(et) && et > 0){
       if(et >= 1){ g('eSSNum').value = Math.round(et); g('eShutterDenom').value = 1; }
       else{ g('eSSNum').value = 1; g('eShutterDenom').value = Math.round(1/et); }
     }
@@ -858,15 +898,21 @@ async function extractExif(file,img){
     const lensName = a.LensModel || a.Lens || a.LensInfo || '';
     if(lensName) g('eLens').value = lensName.trim();
 
-    if(a.FocalLength != null) g('eFocal').value = Math.round(a.FocalLength);
+    const fl = toNum(a.FocalLength);
+    if(!isNaN(fl)) g('eFocal').value = Math.round(fl);
 
-    const dt = a.DateTimeOriginal || a.DateTime || a.CreateDate;
+    let dt = a.DateTimeOriginal || a.DateTime || a.CreateDate;
+    // XMP 由来の日時は文字列で返るため Date に変換
+    if(typeof dt === 'string' && !isNaN(Date.parse(dt))) dt = new Date(dt);
     if(dt instanceof Date){
       const pad = n => String(n).padStart(2,'0');
       g('eDate').value = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
     }
+    // PNG でカメラ情報が取れなかった場合のみ手動入力を案内
+    if(isPNG(file) && !hasCameraExif(a)) showPngMessage();
   } catch(e) {
     console.warn('exifr parse error:', e);
+    if(isPNG(file)) showPngMessage();
   }
   // Oswaldロード完了を待ってから描画
   oswaldReady.then(()=>{ renderFrame(); });
@@ -1190,17 +1236,18 @@ async function processOneFile(file){
   const frameSaved={polSide:g('polSide').value,polBottom:g('polBottom').value,bannerHeight:g('bannerHeight').value};
   try{
     // EXIFを一時的にinputに反映
-    const exif=await exifr.parse(file,{tiff:true,exif:true,iptc:false,xmp:false,icc:false,translateKeys:true,translateValues:false,reviveValues:true})||{};
+    const exif=await exifr.parse(file,{tiff:true,exif:true,iptc:false,xmp:isPNG(file),icc:false,translateKeys:true,translateValues:false,reviveValues:true})||{};
     if(exif.Make)g('eMake').value=exif.Make.trim();
     if(exif.Model)g('eModel').value=exif.Model.trim();
-    if(exif.FNumber!=null)g('eAperture').value=parseFloat(parseFloat(exif.FNumber).toFixed(1));
-    if(exif.ExposureTime!=null){const et=exif.ExposureTime;if(et>=1){g('eSSNum').value=Math.round(et);g('eShutterDenom').value=1;}else{g('eSSNum').value=1;g('eShutterDenom').value=Math.round(1/et);}}
+    const fn=toNum(exif.FNumber);if(!isNaN(fn))g('eAperture').value=parseFloat(fn.toFixed(1));
+    const et=toNum(exif.ExposureTime);if(!isNaN(et)&&et>0){if(et>=1){g('eSSNum').value=Math.round(et);g('eShutterDenom').value=1;}else{g('eSSNum').value=1;g('eShutterDenom').value=Math.round(1/et);}}
     if(exif.ISO!=null)g('eIso').value=exif.ISO;
     else if(exif.ISOSpeedRatings!=null)g('eIso').value=Array.isArray(exif.ISOSpeedRatings)?exif.ISOSpeedRatings[0]:exif.ISOSpeedRatings;
     const lensName=exif.LensModel||exif.Lens||exif.LensInfo||'';
     if(lensName)g('eLens').value=lensName.trim();
-    if(exif.FocalLength!=null)g('eFocal').value=Math.round(exif.FocalLength);
-    const dt=exif.DateTimeOriginal||exif.DateTime||exif.CreateDate;
+    const fl=toNum(exif.FocalLength);if(!isNaN(fl))g('eFocal').value=Math.round(fl);
+    let dt=exif.DateTimeOriginal||exif.DateTime||exif.CreateDate;
+    if(typeof dt==='string'&&!isNaN(Date.parse(dt)))dt=new Date(dt);
     if(dt instanceof Date){const pad=n=>String(n).padStart(2,'0');g('eDate').value=`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;}
     // 画像読み込み
     const dataUrl=await readFileAsDataURL(file);
@@ -1267,6 +1314,7 @@ g('resetBtn').addEventListener('click',()=>{
   const fabGrp2 = document.getElementById('fabGroup'); if(fabGrp2) fabGrp2.style.display='none';
   ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal'].forEach(id=>g(id).value='');
   g('eDate').value='';
+  hidePngMessage();
   updateFileCountUI();
 });
 g('txtColorInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyTxtColorCode();});
