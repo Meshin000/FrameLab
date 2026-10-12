@@ -255,7 +255,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 <div class="app">
   <div class="app-header">
     <div class="app-title">Frame Lab</div>
-    <div class="app-sub">v1.6.1b · EXIF-AWARE PHOTO FRAMER</div>
+    <div class="app-sub">v1.6.2 · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
@@ -947,131 +947,33 @@ function renderFrame(){
 }
 
 
-function renderFullRes(){
-  if(!currentImage)return null;
-  const img=currentImage;
-  const origW=img.naturalWidth, origH=img.naturalHeight;
-
-  // プレビューcanvasが未描画の場合は先に描画してスケール比を確定
-  if(previewCanvas.width===0||previewCanvas.height===0) renderFrame();
-
-  const prevW=previewCanvas.width, prevH=previewCanvas.height;
-  // それでも0なら直接フル解像度でレンダリング
-  if(prevW===0||prevH===0){
-    const exportCanvas=document.createElement('canvas');
-    const exportCtx=exportCanvas.getContext('2d');
-    const fs=getFontSize();
-    const fontStr=`${fontWeight} ${fs}px '${currentFont}',monospace`;
-    if(currentStyle==='overlay') renderOverlay(img,origW,origH,fs,fontStr,exportCanvas,exportCtx);
-    else if(currentStyle==='polaroid') renderPolaroid(img,origW,origH,fs,exportCanvas,exportCtx);
-    else if(currentStyle==='banner') renderBanner(img,origW,origH,fs,fontStr,exportCanvas,exportCtx);
-    return exportCanvas;
-  }
-
-  // プレビューで使った画像サイズを逆算
+// 元画像から直接、出力用キャンバスを描画（単体保存・バッチ共通）
+// フレーム寸法はプレビュー(長辺1600px基準)の値なので、元解像度に合わせて拡大して反映する。
+// プレビュー canvas は使わない（縮小→拡大による劣化を避けるため）
+function renderFromOriginal(img){
   const maxDim=1600;
-  let previewIw=origW, previewIh=origH;
-  if(previewIw>maxDim||previewIh>maxDim){
-    const s=maxDim/Math.max(previewIw,previewIh);
-    previewIw=Math.round(previewIw*s); previewIh=Math.round(previewIh*s);
+  let previewIw=img.naturalWidth,previewIh=img.naturalHeight;
+  if(previewIw>maxDim||previewIh>maxDim){const s=maxDim/Math.max(previewIw,previewIh);previewIw=Math.round(previewIw*s);previewIh=Math.round(previewIh*s);}
+  const scale=img.naturalWidth/previewIw;
+
+  // 枠の値を一時的に拡大する。range入力は max で値が丸められるため、属性も一時的に広げて復元する
+  const frameIds=['polSide','polBottom','bannerHeight'];
+  const frameSaved={};
+  frameIds.forEach(id=>{const el=g(id);frameSaved[id]={value:el.value,min:el.min,max:el.max};});
+  try{
+    frameIds.forEach(id=>{const el=g(id);el.min='0';el.max='100000';el.value=Math.round(parseInt(frameSaved[id].value)*scale);});
+    const fs=Math.round(getFontSize()*scale);
+    const fontStr=`${fontWeight} ${fs}px '${currentFont}',monospace`;
+    const iw=img.naturalWidth,ih=img.naturalHeight;
+    const canvas=document.createElement('canvas');
+    const c=canvas.getContext('2d');
+    if(currentStyle==='overlay')renderOverlay(img,iw,ih,fs,fontStr,canvas,c);
+    else if(currentStyle==='polaroid')renderPolaroid(img,iw,ih,fs,canvas,c);
+    else renderBanner(img,iw,ih,fs,fontStr,canvas,c);
+    return canvas;
+  }finally{
+    frameIds.forEach(id=>{const el=g(id);el.min=frameSaved[id].min;el.max=frameSaved[id].max;el.value=frameSaved[id].value;});
   }
-  // プレビューcanvas全体 vs 元解像度canvas全体のスケール比
-  const scaleW=origW/previewIw; // 画像部分の倍率
-  const exportW=Math.round(prevW*scaleW);
-  const exportH=Math.round(prevH*scaleW);
-
-  const exportCanvas=document.createElement('canvas');
-  exportCanvas.width=exportW; exportCanvas.height=exportH;
-  const exportCtx=exportCanvas.getContext('2d');
-
-  // プレビューcanvasをそのままスケールアップして描画
-  exportCtx.drawImage(previewCanvas, 0, 0, exportW, exportH);
-
-  // 文字だけはフル解像度で再描画してシャープにする
-  const fs=Math.round(getFontSize()*scaleW);
-  const fontStr=`${fontWeight} ${fs}px '${currentFont}',monospace`;
-
-  // 各スタイルのテキスト部分のみ再描画
-  if(currentStyle==='polaroid'){
-    // polaroidのテキスト領域を再描画
-    const side=Math.round(parseInt(g('polSide').value)*scaleW);
-    const polBottom=Math.round(parseInt(g('polBottom').value)*scaleW);
-    const fc=polCustomColor||getChip('pl-c');
-    const isLight=isLightColor(fc);
-    const mainColor=isLight?textColor:'#ddd';
-    const subColor=isLight?blendColor(textColor,0.45):'#999';
-    const {topLine,bottomLine,extra}=getPolaroidLines();
-    const topFs=Math.round(fs*1.1), botFs=Math.round(fs*0.88), extraFs=Math.round(fs*0.82);
-    const topFont=`700 ${topFs}px '${currentFont}',monospace`;
-    const botFont=`400 ${botFs}px '${currentFont}',monospace`;
-    const extraFont=`400 ${extraFs}px '${currentFont}',monospace`;
-    const textLines=[];
-    if(topLine) textLines.push({text:topLine,font:topFont,color:mainColor,lh:topFs*1.5});
-    if(bottomLine) textLines.push({text:bottomLine,font:botFont,color:subColor,lh:botFs*1.5});
-    extra.forEach(t=>textLines.push({text:t,font:extraFont,color:subColor,lh:extraFs*1.5}));
-    const totalTextH=textLines.reduce((a,l)=>a+l.lh,0);
-    const minBottom=Math.max(polBottom,totalTextH+fs*2);
-    const textAreaY=Math.round(origH*scaleW)+side;
-    const startY=textAreaY+(minBottom-totalTextH)/2;
-    // テキスト領域を塗り直してから再描画
-    exportCtx.fillStyle=fc;
-    exportCtx.fillRect(0,textAreaY,exportW,minBottom);
-    exportCtx.textBaseline='top'; exportCtx.textAlign='center';
-    let curY=startY;
-    textLines.forEach(l=>{exportCtx.font=l.font;exportCtx.fillStyle=l.color;exportCtx.fillText(l.text,exportW/2,curY);curY+=l.lh;});
-  } else if(currentStyle==='overlay'){
-    const ohPct=parseInt(g('overlayHeight').value)/100;
-    const iw=origW, ih=origH;
-    const overlayH=Math.round(ih*ohPct);
-    const bgType=getSegVal('overlayBgSeg').bg||'gradient';
-    const isTop=getSegVal('overlayPosSeg').pos==='top';
-    const oy=isTop?0:ih-overlayH;
-    // グラデ/帯を再描画
-    if(bgType==='gradient'){
-      const gr=exportCtx.createLinearGradient(0,isTop?oy:oy+overlayH,0,isTop?oy+overlayH:oy);
-      gr.addColorStop(0,'rgba(0,0,0,0.78)');gr.addColorStop(1,'rgba(0,0,0,0)');
-      exportCtx.fillStyle=gr;exportCtx.fillRect(0,oy,iw,overlayH);
-    }else if(bgType==='band'){
-      const op=parseInt(g('bandOpacity').value)/100;
-      exportCtx.fillStyle=hexToRgba(getChip('band-c'),op);exportCtx.fillRect(0,oy,iw,overlayH);
-    }
-    const lines=getOverlayLines();
-    if(lines.length>0){
-      const lineH=fs*1.6, pad=fs*0.9;
-      const ty=isTop?oy+pad:oy+overlayH-lines.length*lineH-pad;
-      exportCtx.textBaseline='top';
-      lines.forEach((l,i)=>{exportCtx.font=fontStr;exportCtx.fillStyle=i===0?'#ffffff':blendColor('#ffffff',0.7);exportCtx.textAlign='left';exportCtx.fillText(l.text,fs,ty+i*lineH);});
-    }
-  } else if(currentStyle==='banner'){
-    const bh=Math.round(parseInt(g('bannerHeight').value)*scaleW);
-    const iw=origW, ih=origH;
-    const bannerColor=bannerCustomColor||getChip('bn-c');
-    const isLight=isLightColor(bannerColor);
-    const mainColor=isLight?textColor:'#f0ece4';
-    const subColor=isLight?blendColor(textColor,0.45):'#888880';
-    const pad=Math.round(iw*0.025), cy=ih+bh/2;
-    exportCtx.fillStyle=bannerColor;exportCtx.fillRect(0,ih,iw,bh);
-    exportCtx.strokeStyle=isLight?'rgba(0,0,0,0.07)':'rgba(255,255,255,0.1)';
-    exportCtx.lineWidth=Math.round(scaleW);exportCtx.beginPath();exportCtx.moveTo(0,ih);exportCtx.lineTo(iw,ih);exportCtx.stroke();
-    const camText=g('showCamera').checked?fmtCamera():'';
-    const lensName=g('showLens').checked?g('eLens').value:'';
-    const settingsText=g('showSettings').checked?getSettingsText():'';
-    const dateText=g('showDate').checked?fmtDateTime():'';
-    const camFs=Math.round(fs*1.25),lensFs=Math.round(fs*0.85),settingsFs=Math.round(fs*1.1),dateFs=Math.round(fs*0.82);
-    exportCtx.textBaseline='middle';
-    if(camText&&lensName){
-      exportCtx.font=`700 ${camFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='left';exportCtx.fillText(camText,pad,cy-lensFs*0.65);
-      exportCtx.font=`${fontWeight} ${lensFs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.fillText(lensName,pad,cy+camFs*0.5);
-    }else if(camText){exportCtx.font=`700 ${camFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='left';exportCtx.fillText(camText,pad,cy);}
-    else if(lensName){exportCtx.font=`${fontWeight} ${fs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.textAlign='left';exportCtx.fillText(lensName,pad,cy);}
-    if(settingsText&&dateText){
-      exportCtx.font=`700 ${settingsFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='right';exportCtx.fillText(settingsText,iw-pad,cy-dateFs*0.65);
-      exportCtx.font=`${fontWeight} ${dateFs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.fillText(dateText,iw-pad,cy+settingsFs*0.5);
-    }else if(settingsText){exportCtx.font=`700 ${settingsFs}px '${currentFont}',monospace`;exportCtx.fillStyle=mainColor;exportCtx.textAlign='right';exportCtx.fillText(settingsText,iw-pad,cy);}
-    else if(dateText){exportCtx.font=`${fontWeight} ${dateFs}px '${currentFont}',monospace`;exportCtx.fillStyle=subColor;exportCtx.textAlign='right';exportCtx.fillText(dateText,iw-pad,cy);}
-  }
-
-  return exportCanvas;
 }
 
 function renderOverlay(img,iw,ih,fs,fontStr,canvas,c){
@@ -1186,8 +1088,9 @@ function isLightColor(hex){try{const r=parseInt(hex.slice(1,3),16),gv=parseInt(h
 // 保存処理（iOS Chrome対応）
 async function saveImage(){
   if(fileQueue.length>1){await downloadAllAsZip();return;}
-  const exportCanvas=renderFullRes();
-  if(!exportCanvas) return;
+  if(!currentImage) return;
+  // プレビューを使わず、元画像から直接描画（バッチ処理と同じ経路）
+  const exportCanvas=renderFromOriginal(currentImage);
   const dataUrl=exportCanvas.toDataURL('image/jpeg',1.0);
   const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
   if(isIOS){
@@ -1233,7 +1136,6 @@ async function processOneFile(file){
   const ids=['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eDate'];
   const saved={};
   ids.forEach(id=>{const el=g(id);if(el)saved[id]=el.value;});
-  const frameSaved={polSide:g('polSide').value,polBottom:g('polBottom').value,bannerHeight:g('bannerHeight').value};
   try{
     // EXIFを一時的にinputに反映
     const exif=await exifr.parse(file,{tiff:true,exif:true,iptc:false,xmp:isPNG(file),icc:false,translateKeys:true,translateValues:false,reviveValues:true})||{};
@@ -1252,31 +1154,11 @@ async function processOneFile(file){
     // 画像読み込み
     const dataUrl=await readFileAsDataURL(file);
     const img=await loadImage(dataUrl);
-    // スケール係数を計算（プレビュー時のスケーリング比）
-    const maxDim=1600;
-    let previewIw=img.naturalWidth,previewIh=img.naturalHeight;
-    if(previewIw>maxDim||previewIh>maxDim){const s=maxDim/Math.max(previewIw,previewIh);previewIw=Math.round(previewIw*s);previewIh=Math.round(previewIh*s);}
-    const scale=img.naturalWidth/previewIw;
-    // フレームパラメータをスケール調整
-    g('polSide').value=Math.round(parseInt(frameSaved.polSide)*scale);
-    g('polBottom').value=Math.round(parseInt(frameSaved.polBottom)*scale);
-    g('bannerHeight').value=Math.round(parseInt(frameSaved.bannerHeight)*scale);
-    // フォントサイズもスケール調整
-    const fs=Math.round(getFontSize()*scale);
-    const fontStr=`${fontWeight} ${fs}px '${currentFont}',monospace`;
-    // フル解像度で描画
-    const iw=img.naturalWidth,ih=img.naturalHeight;
-    const offCanvas=document.createElement('canvas');
-    const offCtx=offCanvas.getContext('2d');
-    if(currentStyle==='overlay')renderOverlay(img,iw,ih,fs,fontStr,offCanvas,offCtx);
-    else if(currentStyle==='polaroid')renderPolaroid(img,iw,ih,fs,offCanvas,offCtx);
-    else renderBanner(img,iw,ih,fs,fontStr,offCanvas,offCtx);
+    // 元解像度で描画（単体保存と同じ共通関数。枠・フォントのスケール調整もその中で行う）
+    const offCanvas=renderFromOriginal(img);
     return await new Promise(res=>offCanvas.toBlob(b=>res(b),'image/jpeg',1.0));
   }finally{
     ids.forEach(id=>{const el=g(id);if(el)el.value=saved[id]||'';});
-    g('polSide').value=frameSaved.polSide;
-    g('polBottom').value=frameSaved.polBottom;
-    g('bannerHeight').value=frameSaved.bannerHeight;
   }
 }
 
