@@ -222,6 +222,16 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 }
 
 
+/* 複数画像：サムネイル帯（横スクロール） */
+.thumb-strip{display:none;position:relative;gap:6px;width:100%;flex-shrink:0;overflow-x:auto;overflow-y:hidden;padding:4px 2px 6px;scrollbar-width:none;-ms-overflow-style:none;}
+.thumb-strip::-webkit-scrollbar{display:none;}
+.thumb-btn{flex:0 0 auto;width:60px;height:60px;padding:0;border:1.5px solid transparent;border-radius:var(--radius-md);background:var(--bg-tertiary);cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.thumb-btn img{width:100%;height:100%;object-fit:cover;display:block;}
+.thumb-btn.active{border-color:var(--text-primary);}
+.thumb-ph{display:block;width:100%;height:100%;background:var(--bg-tertiary);}
+/* 処理中（保存・読み込み）は右パネルを薄くして操作不可にする */
+.right-panel.is-locked{opacity:.55;transition:opacity .15s;}
+
 /* フッター */
 .app-footer{
   flex-shrink:0;
@@ -255,7 +265,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 <div class="app">
   <div class="app-header">
     <div class="app-title">Frame Lab</div>
-    <div class="app-sub">v1.6.2 · EXIF-AWARE PHOTO FRAMER</div>
+    <div class="app-sub">v1.7.0 · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
@@ -271,6 +281,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
         <canvas id="preview"></canvas>
         <button class="zoom-reset" id="zoomReset">リセット</button>
       </div>
+      <div class="thumb-strip" id="thumbStrip" style="display:none;"></div>
       <div class="left-bottom" id="leftBottom">
         <button class="reset-btn" id="resetBtn"><i class="ti ti-refresh" style="font-size:13px;"></i> 別の写真</button>
         <button class="action-btn" id="downloadBtn"><i class="ti ti-download" style="font-size:13px;"></i> 保存</button>
@@ -283,6 +294,13 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
       <div class="mode-tabs">
         <button class="mode-tab active" onclick="switchMode('simple', this)">かんたん</button>
         <button class="mode-tab" onclick="switchMode('detail', this)">詳細</button>
+      </div>
+
+      <!-- 複数画像：全画像に同じ設定を適用（複数枚のときだけ表示） -->
+      <div class="section-block" id="multiSection" style="display:none;">
+        <div class="section-label">複数画像</div>
+        <button class="apply-btn" id="applyAllBtn" style="width:100%;padding:7px 8px;" title="今の設定（スタイル・色・フォント・枠・表示項目）を全画像に適用します">全画像に同じ設定を適用</button>
+        <div style="font-size:10px;color:var(--text-tertiary);line-height:1.5;">※ 機種・F値などのEXIF情報は、各画像のものを残します</div>
       </div>
 
       <!-- フレームスタイル -->
@@ -609,7 +627,7 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 const g = id => document.getElementById(id);
 let currentImage=null, currentStyle='polaroid', currentFont='Oswald', fontWeight='700', textColor='#000000';
 let renderTimer=null, loadedFonts=new Set(['DM Mono','Playfair Display']);
-let fileQueue=[];
+let items=[],activeIndex=-1,busy=false,switchToken=0;
 
 // PNG 判定
 function isPNG(file){
@@ -840,21 +858,28 @@ dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'))
 dropZone.addEventListener('drop',e=>{
   e.preventDefault();dropZone.classList.remove('dragover');
   const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
-  if(files.length){fileQueue=files;loadFile(files[0]);updateFileCountUI();}
+  if(files.length) loadFiles(files).catch(err=>console.error('loadFiles error:',err));
 });
 fileInput.addEventListener('change',e=>{
   const files=Array.from(e.target.files);
   if(!files.length)return;
-  fileQueue=files;
-  loadFile(files[0]);
-  updateFileCountUI();
+  loadFiles(files).catch(err=>console.error('loadFiles error:',err));
 });
-
-function loadFile(file){
-  const r=new FileReader();
-  r.onload=ev=>{const img=new Image();img.onload=()=>{currentImage=img;extractExif(file,img);};img.src=ev.target.result;};
-  r.readAsDataURL(file);
-}
+// サムネイルをクリックで画像を切り替え
+g('thumbStrip').addEventListener('click',e=>{
+  const b=e.target.closest('.thumb-btn');
+  if(!b||busy) return;
+  activateItem(Number(b.dataset.index)).catch(err=>console.error('switch error:',err));
+});
+// スクロールバーを隠したので、マウスホイールの縦回転で横スクロールできるようにする
+g('thumbStrip').addEventListener('wheel',e=>{
+  const strip=e.currentTarget;
+  if(strip.scrollWidth<=strip.clientWidth) return;
+  if(Math.abs(e.deltaY)<=Math.abs(e.deltaX)) return;
+  e.preventDefault();
+  strip.scrollLeft+=e.deltaY;
+},{passive:false});
+g('applyAllBtn').addEventListener('click',applySettingsToAll);
 
 // EXIF値を数値化（XMP由来の "56/10" や "1/400" のような分数文字列にも対応）
 function toNum(v){
@@ -869,60 +894,259 @@ function toNum(v){
 const CAMERA_EXIF_KEYS=['Make','Model','FNumber','ExposureTime','ISO','ISOSpeedRatings','LensModel','Lens','LensInfo','FocalLength','DateTimeOriginal','DateTime','CreateDate'];
 function hasCameraExif(a){ return CAMERA_EXIF_KEYS.some(k=>a[k]!=null && a[k]!==''); }
 
-async function extractExif(file,img){
-  hidePngMessage();
-  // JPEG / PNG 共通で exifr により読み込み（exifr は PNG の eXIf チャンクも読める）
-  try {
-    // PNG は Lightroom 等が EXIF を XMP(iTXt) に入れるため xmp を有効化（JPEG は従来どおり）
-    const a = await exifr.parse(file, {
-      tiff: true, exif: true, iptc: false, xmp: isPNG(file), icc: false,
-      translateKeys: true, translateValues: false, reviveValues: true,
-    }) || {};
+// ---- 複数画像：画像ごとの設定 ----
+// 画像ごとに別々に持つ入力欄（EXIF由来の値）
+const EXIF_FIELD_IDS=['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eDate'];
+// 設定として保存する入力欄（プリセット名は対象外）
+const FORM_SELECTOR='.right-panel input[id]:not(#presetName), .right-panel select[id]';
+// 選択状態（selected / active）を持つ要素。並び順はHTMLで固定なので、インデックスで対応づける
+const FLAG_SELECTOR='.right-panel .color-chip, .right-panel .seg-btn, .right-panel .style-card, .right-panel .font-tab';
+const FONT_SOURCES=['google','system','custom'];
 
-    if(a.Make) g('eMake').value = a.Make.trim();
-    if(a.Model) g('eModel').value = a.Model.trim();
+// 画面の設定をまとめて取得
+function snapshotForm(){
+  const controls={};
+  document.querySelectorAll(FORM_SELECTOR).forEach(el=>{
+    controls[el.id]=el.type==='checkbox'?{checked:el.checked}:{value:el.value};
+  });
+  const flags=Array.from(document.querySelectorAll(FLAG_SELECTOR)).map(el=>({
+    sel:el.classList.contains('selected'),
+    act:el.classList.contains('active'),
+  }));
+  const fontIdx=Array.from(document.querySelectorAll('.font-tab')).findIndex(t=>t.classList.contains('active'));
+  return {
+    controls,flags,
+    globals:{
+      style:currentStyle,font:currentFont,weight:fontWeight,textColor,
+      polCustomColor,bannerCustomColor,
+      fontSource:FONT_SOURCES[fontIdx<0?0:fontIdx],
+    },
+  };
+}
 
-    const fn = toNum(a.FNumber);
-    if(!isNaN(fn)) g('eAperture').value = parseFloat(fn.toFixed(1));
+// 保存済みの設定を画面へ戻す（change イベントは発火させない）
+async function restoreForm(s){
+  Object.entries(s.controls).forEach(([id,v])=>{
+    const el=g(id); if(!el) return;
+    if('checked' in v) el.checked=v.checked; else el.value=v.value;
+  });
+  document.querySelectorAll(FLAG_SELECTOR).forEach((el,i)=>{
+    const f=s.flags[i]; if(!f) return;
+    el.classList.toggle('selected',f.sel);
+    el.classList.toggle('active',f.act);
+  });
+  const G=s.globals;
+  currentStyle=G.style; currentFont=G.font; fontWeight=G.weight; textColor=G.textColor;
+  polCustomColor=G.polCustomColor; bannerCustomColor=G.bannerCustomColor;
+  syncDerivedUI(G.fontSource);
+  // Google Fonts は未読み込みなら読み込んでから描画する（代替フォントで描かれるのを防ぐ）
+  if(G.fontSource==='google' && !loadedFonts.has(currentFont)) await applyGoogleFont();
+}
 
-    const et = toNum(a.ExposureTime);
-    if(!isNaN(et) && et > 0){
-      if(et >= 1){ g('eSSNum').value = Math.round(et); g('eShutterDenom').value = 1; }
-      else{ g('eSSNum').value = 1; g('eShutterDenom').value = Math.round(1/et); }
-    }
+// 復元した選択状態から、表示だけを合わせる（パネルの開閉・数値表示）
+function syncDerivedUI(fontSource){
+  ['overlayOpts','polaroidOpts','bannerOpts'].forEach(id=>g(id).classList.remove('visible'));
+  g(currentStyle+'Opts').classList.add('visible');
+  g('overlayBandOpts').style.display=getSegVal('overlayBgSeg').bg==='band'?'flex':'none';
+  g('bandOpacityVal').textContent=g('bandOpacity').value+'%';
+  g('overlayHeightVal').textContent=g('overlayHeight').value+'%';
+  g('googleFontPanel').style.display=fontSource==='google'?'':'none';
+  g('systemFontPanel').style.display=fontSource==='system'?'':'none';
+  g('customFontPanel').style.display=fontSource==='custom'?'':'none';
+}
 
-    if(a.ISO != null) g('eIso').value = a.ISO;
-    else if(a.ISOSpeedRatings != null) g('eIso').value = Array.isArray(a.ISOSpeedRatings) ? a.ISOSpeedRatings[0] : a.ISOSpeedRatings;
+// ファイルから画像を読み込む（Blob URL を使い、読み込み後に解放）
+function loadImageFromFile(file){
+  const url=URL.createObjectURL(file);
+  return loadImage(url).finally(()=>URL.revokeObjectURL(url));
+}
 
-    // レンズ情報: 複数タグをフォールバック
-    const lensName = a.LensModel || a.Lens || a.LensInfo || '';
-    if(lensName) g('eLens').value = lensName.trim();
-
-    const fl = toNum(a.FocalLength);
-    if(!isNaN(fl)) g('eFocal').value = Math.round(fl);
-
-    let dt = a.DateTimeOriginal || a.DateTime || a.CreateDate;
-    // XMP 由来の日時は文字列で返るため Date に変換
-    if(typeof dt === 'string' && !isNaN(Date.parse(dt))) dt = new Date(dt);
-    if(dt instanceof Date){
-      const pad = n => String(n).padStart(2,'0');
-      g('eDate').value = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-    }
-    // PNG でカメラ情報が取れなかった場合のみ手動入力を案内
-    if(isPNG(file) && !hasCameraExif(a)) showPngMessage();
-  } catch(e) {
-    console.warn('exifr parse error:', e);
-    if(isPNG(file)) showPngMessage();
+// EXIFオブジェクト → 入力欄の値（取れた項目だけ）
+function exifToFields(a){
+  const f={};
+  if(a.Make) f.eMake=String(a.Make).trim();
+  if(a.Model) f.eModel=String(a.Model).trim();
+  const fn=toNum(a.FNumber);
+  if(!isNaN(fn)) f.eAperture=String(parseFloat(fn.toFixed(1)));
+  const et=toNum(a.ExposureTime);
+  if(!isNaN(et)&&et>0){
+    if(et>=1){ f.eSSNum=String(Math.round(et)); f.eShutterDenom='1'; }
+    else{ f.eSSNum='1'; f.eShutterDenom=String(Math.round(1/et)); }
   }
-  // Oswaldロード完了を待ってから描画
-  oswaldReady.then(()=>{ renderFrame(); });
+  if(a.ISO!=null) f.eIso=String(a.ISO);
+  else if(a.ISOSpeedRatings!=null) f.eIso=String(Array.isArray(a.ISOSpeedRatings)?a.ISOSpeedRatings[0]:a.ISOSpeedRatings);
+  // レンズ情報: 複数タグをフォールバック
+  const lensName=a.LensModel||a.Lens||a.LensInfo||'';
+  if(lensName) f.eLens=String(lensName).trim();
+  const fl=toNum(a.FocalLength);
+  if(!isNaN(fl)) f.eFocal=String(Math.round(fl));
+  let dt=a.DateTimeOriginal||a.DateTime||a.CreateDate;
+  // XMP 由来の日時は文字列で返るため Date に変換
+  if(typeof dt==='string'&&!isNaN(Date.parse(dt))) dt=new Date(dt);
+  if(dt instanceof Date){
+    const pad=n=>String(n).padStart(2,'0');
+    f.eDate=`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  }
+  return f;
+}
+
+// ファイルのEXIFを読む（JPEG / PNG 共通。PNG は XMP も読む）
+async function readExifFields(file){
+  let a=null;
+  try{
+    a=await exifr.parse(file,{
+      tiff:true,exif:true,iptc:false,xmp:isPNG(file),icc:false,
+      translateKeys:true,translateValues:false,reviveValues:true,
+    })||{};
+  }catch(e){
+    console.warn('exifr parse error:',e);
+  }
+  return {
+    fields: a?exifToFields(a):{},
+    // PNG でカメラ情報が取れなかった（または読めなかった）場合のみ手動入力を案内
+    needsManual: isPNG(file) && (!a || !hasCameraExif(a)),
+  };
+}
+
+// 画像ごとの設定にEXIF値を入れる（取れなかった項目は空）
+function applyFieldsToSettings(settings,fields){
+  EXIF_FIELD_IDS.forEach(id=>{ settings.controls[id]={value:fields[id]!=null?fields[id]:''}; });
+}
+
+// サムネイル（縮小画像）を作る
+async function makeThumbnail(file){
+  const img=await loadImageFromFile(file);
+  const s=Math.min(1,120/Math.max(img.naturalWidth,img.naturalHeight));
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(img.naturalWidth*s));
+  c.height=Math.max(1,Math.round(img.naturalHeight*s));
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',0.8);
+}
+
+function buildThumbStrip(){
+  const strip=g('thumbStrip');
+  strip.innerHTML='';
+  items.forEach((it,i)=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='thumb-btn';
+    b.dataset.index=String(i);
+    b.title=it.name;
+    b.innerHTML='<span class="thumb-ph"></span>';
+    strip.appendChild(b);
+  });
+  updateThumbVisibility();
+}
+
+function setThumbImage(i,dataUrl){
+  const b=g('thumbStrip').children[i];
+  if(!b||!dataUrl) return;
+  b.innerHTML='';
+  const im=document.createElement('img');
+  im.src=dataUrl; im.alt='';
+  b.appendChild(im);
+}
+
+function highlightThumb(index){
+  const strip=g('thumbStrip');
+  Array.from(strip.children).forEach((b,i)=>b.classList.toggle('active',i===index));
+  const act=strip.children[index];
+  if(act) strip.scrollTo({left:act.offsetLeft-strip.clientWidth/2+act.offsetWidth/2,behavior:'smooth'});
+}
+
+function updateThumbVisibility(){
+  const multi=items.length>1;
+  g('thumbStrip').style.display=multi?'flex':'none';
+  g('multiSection').style.display=multi?'flex':'none';
+}
+
+// 処理中（読み込み・保存）は右パネルと一覧を操作できないようにする（inert で入力とフォーカスを止める）
+function setLockedUI(on){
+  const panel=document.querySelector('.right-panel');
+  panel.inert=on;
+  panel.classList.toggle('is-locked',on);
+  g('thumbStrip').inert=on;
+  g('downloadBtn').disabled=on;
+  g('resetBtn').disabled=on;
+  const fabSave=g('fabSave'); if(fabSave) fabSave.disabled=on;
+}
+
+function currentItem(){ return activeIndex>=0?items[activeIndex]:null; }
+
+// 画像を切り替える：画面の設定を切り替え前の画像へ保存 → 切り替え先の画像と設定を読み込む
+async function activateItem(index){
+  if(index<0||index>=items.length) return;
+  const token=++switchToken;
+  const next=items[index];
+  const img=await loadImageFromFile(next.file);
+  // 連続して切り替えた場合は、最後の操作だけを反映する
+  if(token!==switchToken) return;
+  // 読み込み完了後、画面の設定を切り替え前の画像へ保存する（この後は同期処理のみ）
+  const prev=currentItem();
+  if(prev) prev.settings=snapshotForm();
+  activeIndex=index;
+  currentImage=img;
+  hidePngMessage();
+  highlightThumb(index);
+  await restoreForm(next.settings);
+  if(token!==switchToken) return;
+  if(next.needsManualExif) showPngMessage();
+  renderFrame();
+  oswaldReady.then(()=>renderFrame());
   document.dispatchEvent(new Event('framerendered'));
-  dropZone.style.display='none';
-  g('previewWrap').style.display='flex';
-  g('leftBottom').style.display='flex';
-  // FABグループを表示（モバイル）
-  const fabGrp = document.getElementById('fabGroup');
-  if(fabGrp && window.innerWidth <= 768) fabGrp.style.display = 'flex';
+}
+
+// 画像を読み込んで一覧を作る（EXIFとサムネイルを準備し、1枚目を表示）
+async function loadFiles(files){
+  if(busy||!files.length) return;
+  busy=true;setLockedUI(true);
+  try{
+    switchToken++;
+    activeIndex=-1;
+    currentImage=null;
+    // 新しい一覧の初期設定：今の画面の設定（スタイル・色など）を引き継ぎ、EXIF欄は空にする
+    const base=snapshotForm();
+    EXIF_FIELD_IDS.forEach(id=>{ base.controls[id]={value:''}; });
+    items=files.map(file=>({file,name:file.name,settings:null,needsManualExif:false,thumb:null}));
+    items.forEach(it=>{ it.settings=JSON.parse(JSON.stringify(base)); });
+    dropZone.style.display='none';
+    g('previewWrap').style.display='flex';
+    g('leftBottom').style.display='flex';
+    const fabGrp=document.getElementById('fabGroup');
+    if(fabGrp && window.innerWidth<=768) fabGrp.style.display='flex';
+    buildThumbStrip();
+    updateFileCountUI();
+    // 各画像のEXIFとサムネイルを順に準備
+    for(let i=0;i<items.length;i++){
+      const it=items[i];
+      const {fields,needsManual}=await readExifFields(it.file);
+      applyFieldsToSettings(it.settings,fields);
+      it.needsManualExif=needsManual;
+      try{ it.thumb=await makeThumbnail(it.file); }catch(e){ console.warn('thumbnail error:',e); }
+      setThumbImage(i,it.thumb);
+    }
+    await activateItem(0);
+  }finally{
+    busy=false;setLockedUI(false);
+  }
+}
+
+// 今の画面の設定を全画像に適用（EXIF由来の値は各画像のものを残す）
+function applySettingsToAll(){
+  if(busy||items.length<2||activeIndex<0) return;
+  const cur=snapshotForm();
+  items[activeIndex].settings=cur;
+  items.forEach((it,i)=>{
+    if(i===activeIndex) return;
+    const next=JSON.parse(JSON.stringify(cur));
+    EXIF_FIELD_IDS.forEach(id=>{ next.controls[id]=it.settings.controls[id]; });
+    it.settings=next;
+  });
+  const btn=g('applyAllBtn');
+  const label=btn.textContent;
+  btn.textContent='適用しました';
+  setTimeout(()=>{ btn.textContent=label; },1500);
 }
 
 // ファイル枚数UI更新
@@ -1087,8 +1311,11 @@ function isLightColor(hex){try{const r=parseInt(hex.slice(1,3),16),gv=parseInt(h
 
 // 保存処理（iOS Chrome対応）
 async function saveImage(){
-  if(fileQueue.length>1){await downloadAllAsZip();return;}
+  if(busy) return;
+  if(items.length>1){await downloadAllAsZip();return;}
   if(!currentImage) return;
+  busy=true;setLockedUI(true);
+  try{
   // プレビューを使わず、元画像から直接描画（バッチ処理と同じ経路）
   const exportCanvas=renderFromOriginal(currentImage);
   const dataUrl=exportCanvas.toDataURL('image/jpeg',1.0);
@@ -1110,12 +1337,11 @@ async function saveImage(){
     l.href=dataUrl;
     l.click();
   }
+  }finally{
+    busy=false;setLockedUI(false);
+  }
 }
 
-// FileReader をPromise化
-function readFileAsDataURL(file){
-  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(file);});
-}
 // Image読み込みをPromise化
 function loadImage(dataUrl){
   return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=dataUrl;});
@@ -1124,55 +1350,38 @@ function loadImage(dataUrl){
 function updateFileCountUI(){
   const btn=g('downloadBtn');
   if(!btn)return;
-  if(fileQueue.length>1){
-    btn.innerHTML=`<i class="ti ti-download" style="font-size:13px;"></i> ${fileQueue.length}枚をZIPで保存`;
+  if(items.length>1){
+    btn.innerHTML=`<i class="ti ti-download" style="font-size:13px;"></i> ${items.length}枚をZIPで保存`;
   }else{
     btn.innerHTML='<i class="ti ti-download" style="font-size:13px;"></i> 保存';
   }
 }
 
-// 1ファイルを処理してBlobを返す（フル解像度＆フレームパラメータはスケール調整）
-async function processOneFile(file){
-  const ids=['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal','eDate'];
-  const saved={};
-  ids.forEach(id=>{const el=g(id);if(el)saved[id]=el.value;});
-  try{
-    // EXIFを一時的にinputに反映
-    const exif=await exifr.parse(file,{tiff:true,exif:true,iptc:false,xmp:isPNG(file),icc:false,translateKeys:true,translateValues:false,reviveValues:true})||{};
-    if(exif.Make)g('eMake').value=exif.Make.trim();
-    if(exif.Model)g('eModel').value=exif.Model.trim();
-    const fn=toNum(exif.FNumber);if(!isNaN(fn))g('eAperture').value=parseFloat(fn.toFixed(1));
-    const et=toNum(exif.ExposureTime);if(!isNaN(et)&&et>0){if(et>=1){g('eSSNum').value=Math.round(et);g('eShutterDenom').value=1;}else{g('eSSNum').value=1;g('eShutterDenom').value=Math.round(1/et);}}
-    if(exif.ISO!=null)g('eIso').value=exif.ISO;
-    else if(exif.ISOSpeedRatings!=null)g('eIso').value=Array.isArray(exif.ISOSpeedRatings)?exif.ISOSpeedRatings[0]:exif.ISOSpeedRatings;
-    const lensName=exif.LensModel||exif.Lens||exif.LensInfo||'';
-    if(lensName)g('eLens').value=lensName.trim();
-    const fl=toNum(exif.FocalLength);if(!isNaN(fl))g('eFocal').value=Math.round(fl);
-    let dt=exif.DateTimeOriginal||exif.DateTime||exif.CreateDate;
-    if(typeof dt==='string'&&!isNaN(Date.parse(dt)))dt=new Date(dt);
-    if(dt instanceof Date){const pad=n=>String(n).padStart(2,'0');g('eDate').value=`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;}
-    // 画像読み込み
-    const dataUrl=await readFileAsDataURL(file);
-    const img=await loadImage(dataUrl);
-    // 元解像度で描画（単体保存と同じ共通関数。枠・フォントのスケール調整もその中で行う）
-    const offCanvas=renderFromOriginal(img);
-    return await new Promise(res=>offCanvas.toBlob(b=>res(b),'image/jpeg',1.0));
-  }finally{
-    ids.forEach(id=>{const el=g(id);if(el)el.value=saved[id]||'';});
-  }
+// 1枚分の出力：画像の設定を画面へ戻し、元解像度で描画してBlobを返す（呼び出し後は画面の設定が変わる）
+async function processOneItem(item){
+  await restoreForm(item.settings);
+  const img=await loadImageFromFile(item.file);
+  // 元解像度で描画（単体保存と同じ共通関数。枠・フォントのスケール調整もその中で行う）
+  const canvas=renderFromOriginal(img);
+  return await new Promise(res=>canvas.toBlob(b=>res(b),'image/jpeg',1.0));
 }
 
-// 全ファイルをZIPにまとめてダウンロード
+// 全画像をZIPにまとめてダウンロード（画像ごとの設定を使う）
 async function downloadAllAsZip(){
+  if(busy) return;
+  busy=true;setLockedUI(true);
   const btn=g('downloadBtn');
   const fabSave=g('fabSave');
   btn.textContent='処理中...';btn.disabled=true;
   if(fabSave)fabSave.disabled=true;
+  // 今の画面の設定を保存しておき、処理後にこの状態へ戻す
+  const activeSnap=snapshotForm();
+  if(currentItem()) currentItem().settings=activeSnap;
   try{
     const zip=new JSZip();
-    for(const file of fileQueue){
-      const blob=await processOneFile(file);
-      const name=file.name.replace(/\.[^.]+$/,'')+'_framed.jpg';
+    for(const item of items){
+      const blob=await processOneItem(item);
+      const name=item.name.replace(/\.[^.]+$/,'')+'_framed.jpg';
       zip.file(name,blob);
     }
     const zipBlob=await zip.generateAsync({type:'blob'});
@@ -1183,19 +1392,26 @@ async function downloadAllAsZip(){
   }catch(e){
     console.error('ZIP error:',e);alert('処理中にエラーが発生しました。');
   }finally{
+    try{ await restoreForm(activeSnap); renderFrame(); }catch(e){ console.error('restore error:',e); }
     updateFileCountUI();btn.disabled=false;
     if(fabSave)fabSave.disabled=false;
+    busy=false;setLockedUI(false);
   }
 }
 
 g('downloadBtn').addEventListener('click', saveImage);
 g('resetBtn').addEventListener('click',()=>{
-  currentImage=null;previewCanvas.width=0;fileQueue=[];
+  if(busy) return;
+  switchToken++;
+  items=[];activeIndex=-1;
+  currentImage=null;previewCanvas.width=0;
   g('previewWrap').style.display='none';g('leftBottom').style.display='none';
   dropZone.style.display='flex';fileInput.value='';
   const fabGrp2 = document.getElementById('fabGroup'); if(fabGrp2) fabGrp2.style.display='none';
   ['eMake','eModel','eAperture','eSSNum','eShutterDenom','eIso','eLens','eFocal'].forEach(id=>g(id).value='');
   g('eDate').value='';
+  g('thumbStrip').innerHTML='';
+  updateThumbVisibility();
   hidePngMessage();
   updateFileCountUI();
 });
