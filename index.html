@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Frame Lab — EXIF-Aware Photo Framer</title>
+<title>ExiFra.me — EXIF-Aware Photo Framer</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
@@ -32,6 +32,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg-tertiary);color:var(--t
 
 .app-header{display:flex;align-items:baseline;gap:12px;padding:.85rem 1.5rem;border-bottom:.5px solid var(--border-tertiary);background:var(--bg-primary);flex-shrink:0;}
 .app-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:500;}
+/* ロゴの「.me」は薄く表示する */
+.app-title .me{color:var(--text-tertiary);}
 .app-sub{font-size:11px;color:var(--text-tertiary);letter-spacing:.08em;}
 
 .workspace{display:grid;grid-template-columns:1fr 280px;flex:1;min-height:0;overflow:hidden;}
@@ -264,8 +266,8 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 <body>
 <div class="app">
   <div class="app-header">
-    <div class="app-title">Frame Lab</div>
-    <div class="app-sub">v1.7.0 · EXIF-AWARE PHOTO FRAMER</div>
+    <div class="app-title">ExiFra<span class="me">.me</span></div>
+    <div class="app-sub">v1.7.1 · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
@@ -1325,7 +1327,7 @@ async function saveImage(){
     // 長押し→「写真に追加」または「画像を保存」で保存できる
     const w=window.open('','_blank');
     if(w){
-      w.document.write('<html><head><meta name="viewport" content="width=device-width"><title>Frame Lab</title><style>body{margin:0;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:100vh;padding:16px;gap:12px;}img{max-width:100%;border-radius:4px;}p{color:#fff;font-family:sans-serif;font-size:13px;opacity:.7;text-align:center;}</style></head><body>');
+      w.document.write('<html><head><meta name="viewport" content="width=device-width"><title>ExiFra.me</title><style>body{margin:0;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:100vh;padding:16px;gap:12px;}img{max-width:100%;border-radius:4px;}p{color:#fff;font-family:sans-serif;font-size:13px;opacity:.7;text-align:center;}</style></head><body>');
       w.document.write('<p>画像を長押しして「写真に追加」または「画像を保存」</p>');
       w.document.write(`<img src="${dataUrl}" />`);
       w.document.write('</body></html>');
@@ -1387,7 +1389,7 @@ async function downloadAllAsZip(){
     const zipBlob=await zip.generateAsync({type:'blob'});
     const url=URL.createObjectURL(zipBlob);
     const a=document.createElement('a');a.href=url;
-    a.download='framelab_'+Date.now()+'.zip';a.click();
+    a.download='exifra_'+Date.now()+'.zip';a.click();
     URL.revokeObjectURL(url);
   }catch(e){
     console.error('ZIP error:',e);alert('処理中にエラーが発生しました。');
