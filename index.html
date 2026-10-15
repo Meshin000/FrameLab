@@ -3,7 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ExiFra.me — EXIF-Aware Photo Framer</title>
+<title>ExiFra.me｜写真のEXIF情報をフレームにして保存できる無料Webアプリ</title>
+<meta name="description" content="写真のEXIF情報（カメラ・レンズ・F値・SS・ISO・撮影日時）を読み取り、フレーム付きで保存できる無料Webアプリ。JPEG・PNG対応、複数枚のZIP一括保存も可能。">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://exifra.me/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ExiFra.me">
+<meta property="og:title" content="ExiFra.me｜写真のEXIF情報をフレームにして保存">
+<meta property="og:description" content="写真のEXIF情報（カメラ・レンズ・F値・SS・ISO・撮影日時）を読み取り、フレーム付きで保存できる無料Webアプリ。">
+<meta property="og:url" content="https://exifra.me/">
+<meta property="og:image" content="https://exifra.me/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ja_JP">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ExiFra.me｜写真のEXIF情報をフレームにして保存">
+<meta name="twitter:description" content="写真のEXIF情報を読み取り、フレーム付きで保存できる無料Webアプリ。">
+<meta name="twitter:image" content="https://exifra.me/og-image.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "ExiFra.me",
+  "url": "https://exifra.me/",
+  "description": "写真のEXIF情報（カメラ・レンズ・F値・SS・ISO・撮影日時）を読み取り、フレーム付きで保存できる無料Webアプリ。JPEG・PNG対応、複数枚のZIP一括保存も可能。",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "JavaScriptに対応したモダンブラウザ",
+  "inLanguage": "ja",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "JPY" },
+  "author": { "@type": "Person", "name": "Meshin", "url": "https://lit.link/meshin" }
+}
+</script>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
@@ -264,10 +296,11 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 </style>
 </head>
 <body>
+<noscript><p>ExiFra.me は、写真のEXIF情報（カメラ・レンズ・F値・シャッタースピード・ISO・撮影日時）を読み取り、フレーム付きで保存できる無料のWebアプリです。ご利用にはJavaScriptを有効にしてください。</p></noscript>
 <div class="app">
   <div class="app-header">
     <div class="app-title">ExiFra<span class="me">.me</span></div>
-    <div class="app-sub">v1.7.1 · EXIF-AWARE PHOTO FRAMER</div>
+    <div class="app-sub">v1.7.2 · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
