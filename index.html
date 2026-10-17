@@ -25,6 +25,7 @@
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "ExiFra.me",
+  "alternateName": ["ExiFra", "エクシフラ", "Exif フレーム"],
   "url": "https://exifra.me/",
   "description": "写真のEXIF情報（カメラ・レンズ・F値・SS・ISO・撮影日時）を読み取り、フレーム付きで保存できる無料Webアプリ。JPEG・PNG対応、複数枚のZIP一括保存も可能。",
   "applicationCategory": "MultimediaApplication",
@@ -37,6 +38,9 @@
 }
 </script>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="48x48" href="favicon-48.png">
+<link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
@@ -266,6 +270,14 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 /* 処理中（保存・読み込み）は右パネルを薄くして操作不可にする */
 .right-panel.is-locked{opacity:.55;transition:opacity .15s;}
 
+/* 説明文（検索エンジン向け・折りたたみ式） */
+.about{max-width:760px;margin:0 auto;padding:1rem 1.5rem 2rem;font-size:12px;line-height:1.8;color:var(--text-secondary);background:var(--bg-primary);}
+.about summary{cursor:pointer;color:var(--text-tertiary);letter-spacing:.04em;}
+.about h2{font-size:15px;font-weight:500;color:var(--text-primary);margin:1rem 0 .5rem;font-family:'Playfair Display',serif;}
+.about h3{font-size:12px;font-weight:500;color:var(--text-primary);margin:1rem 0 .35rem;}
+.about p,.about li{margin-bottom:.35rem;}
+.about ul,.about ol{padding-left:1.25rem;}
+
 /* フッター */
 .app-footer{
   flex-shrink:0;
@@ -299,8 +311,8 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
 <noscript><p>ExiFra.me は、写真のEXIF情報（カメラ・レンズ・F値・シャッタースピード・ISO・撮影日時）を読み取り、フレーム付きで保存できる無料のWebアプリです。ご利用にはJavaScriptを有効にしてください。</p></noscript>
 <div class="app">
   <div class="app-header">
-    <div class="app-title">ExiFra<span class="me">.me</span></div>
-    <div class="app-sub">v1.7.2 · EXIF-AWARE PHOTO FRAMER</div>
+    <h1 class="app-title">ExiFra<span class="me">.me</span></h1>
+    <div class="app-sub">v1.7.3 · EXIF-AWARE PHOTO FRAMER</div>
   </div>
 
   <div class="workspace">
@@ -644,6 +656,29 @@ input[type=datetime-local]:focus{outline:none;border-color:var(--border-primary)
   </footer>
 
 </div>
+
+<!-- 説明文（検索エンジン・初めての方向け。折りたたみ式） -->
+<section class="about" aria-label="ExiFra.me について">
+  <details>
+    <summary>ExiFra.me について（Exif情報をフレームにして保存する方法）</summary>
+    <h2>写真のExif情報をフレームにして保存できる無料Webアプリ</h2>
+    <p>ExiFra.me（エクシフラ・ドット・ミー）は、写真の撮影情報（カメラ・レンズ・F値・シャッタースピード・ISO・焦点距離・撮影日時）を読み取り、フレームに入れて保存できる無料のWebアプリです。Exifフレームを作りたいときに使えます。</p>
+    <h3>主な機能</h3>
+    <ul>
+      <li>Exif情報の自動読み取り（JPEG・PNG対応。Lightroomで書き出したPNGにも対応）</li>
+      <li>フレームスタイル：Polaroid（ポラロイド）・Overlay（オーバーレイ）・Banner（バナー）</li>
+      <li>複数枚の写真を画像ごとに設定し、ZIPでまとめて保存</li>
+      <li>フレームの色・余白・フォントの変更、プリセット保存</li>
+    </ul>
+    <h3>使い方</h3>
+    <ol>
+      <li>写真をドロップ、またはクリックして選択します。</li>
+      <li>フレームスタイルと表示するExif情報を選びます。</li>
+      <li>保存ボタンでJPEG画像として保存します。</li>
+    </ol>
+    <p>写真は、お使いのブラウザの中だけで処理され、サーバーには送信されません。</p>
+  </details>
+</section>
 
 <!-- フローティングボタン群（モバイル用） -->
 <div class="fab-group" id="fabGroup" style="display:none;">
